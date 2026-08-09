@@ -1,6 +1,7 @@
 import { createCategoryUseCase } from "@/src/backend/application/category/create-category.usecase";
 import { NextResponse } from "next/server";
 import {listCategoriesUseCase} from "../../../backend/application/category/list-categories.usecase"
+import { handleApiError } from "@/src/backend/shared/errors/api/handle-api-error";
 
 export async function POST(request: Request) {
 
@@ -19,26 +20,19 @@ export async function POST(request: Request) {
 
     } catch (error) {
 
-        return NextResponse.json(
-            {
-                message:
-                    error instanceof Error
-                        ? error.message
-                        : "Internal Server Error"
-            },
-            {
-                status: 400
-            }
-        );
-
+       return  handleApiError(error);
     }
 
 }
 
 export async function GET() {
 
-    const categories = await listCategoriesUseCase();
-
-    return NextResponse.json(categories);
+    try {
+        const categories = await listCategoriesUseCase();
+    
+        return NextResponse.json(categories);
+    } catch (error) {
+        return  handleApiError(error);
+    }
 
 }

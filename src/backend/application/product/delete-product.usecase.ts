@@ -1,5 +1,6 @@
 import { prisma } from "@/src/lib/db/prisma";
 import { requireAdmin } from "../../shared/auth/session-validation";
+import { AppError } from "../../shared/errors/api/AppError";
 
 export async function deleteProductUseCase(ProductId: string) {
 
@@ -14,7 +15,7 @@ export async function deleteProductUseCase(ProductId: string) {
   });
 
   if (!Product) {
-    throw new Error("Product not found.");
+    throw new AppError("Product not found.",404);
   }
 
   // Delete

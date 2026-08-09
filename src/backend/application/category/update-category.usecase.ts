@@ -1,6 +1,7 @@
 import { prisma } from "@/src/lib/db/prisma";
 import { UpdateCategoryInput, UpdateCategorySchema } from "@/src/schema/category.schema";
 import { requireAdmin } from "../../shared/auth/session-validation";
+import { AppError } from "../../shared/errors/api/AppError";
 
 
 
@@ -24,7 +25,7 @@ export async function updateCategoryUseCase(
   });
 
   if (!existingCategory) {
-    throw new Error("Category not found.");
+    throw new AppError("Category not found.",404);
   }
 
   // Prevent duplicate names
@@ -39,7 +40,7 @@ export async function updateCategoryUseCase(
     });
 
     if (duplicate) {
-      throw new Error("Category name already exists.");
+      throw new AppError("Category name already exists.",409);
     }
   }
 

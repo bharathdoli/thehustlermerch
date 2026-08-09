@@ -1,4 +1,5 @@
 import { prisma } from "@/src/lib/db/prisma";
+import { AppError } from "../../shared/errors/api/AppError";
 
 
 export async function getCategoryUseCase(id: string){
@@ -10,7 +11,7 @@ export async function getCategoryUseCase(id: string){
     })
 
     if(!category){
-        throw new Error("Category Not Found");
+        throw new AppError("Category Not Found",404);
     }
 
     return {

@@ -10,31 +10,31 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  
+
 }
 
 
 // ─────────────────────────────────────────────────────────────────────────
-// Printing Press — Prisma schema
-// Base: Corporate Gifting E-Commerce schema (DB Design v6)
-// Added: Employee, PrintJob, JobStageHistory, Material, MaterialUsage
-// Target: PostgreSQL / Supabase
+// Custom Merch Store (caps / t-shirts / shirts / cups / hoodies) — Prisma schema
+// Single-admin model: no Employee, PrintJob, ProductionStage, JobStageHistory,
+// or Material — those existed to coordinate multiple people, which this
+// business doesn't have yet. Extend later by adding new tables/nullable
+// columns, not by rewriting what's here.
 // ─────────────────────────────────────────────────────────────────────────
-
 
 // ── Enums ───────────────────────────────────────────────────────────────
 
 enum UserRole {
   Customer
   Admin
-  Employee // NEW — lets an Employee log in through the same auth flow
 
   @@map("user_role")
 }
 
 enum OrderStatus {
-  pending
-  confirmed
+  pending           // order placed, payment not yet confirmed
+  paymentConfirmed  // admin manually verified payment (or gateway confirmed, later)
+  processing        // admin is printing/customizing and packing
   shipped
   delivered
   cancelled
@@ -51,41 +51,12 @@ enum PaymentStatus {
   @@map("payment_status")
 }
 
-// NEW — production pipeline stages a PrintJob moves through
-enum ProductionStage {
-  DesignReview
-  Prepress
-  Printing
-  QualityCheck
-  Dispatch
-  Completed
-  OnHold
+// NEW — discount type for coupons
+enum DiscountType {
+  Percentage
+  Flat
 
-  @@map("production_stage")
-}
-
-// NEW — which team an employee belongs to; also doubles as job routing
-enum EmployeeDepartment {
-  Design
-  Prepress
-  Printing
-  QualityCheck
-  Dispatch
-  Inventory
-  General
-
-  @@map("employee_department")
-}
-
-// NEW — unit of measure for stocked materials
-enum MaterialUnit {
-  sheet
-  kg
-  litre
-  roll
-  piece
-
-  @@map("material_unit")
+  @@map("discount_type")
 }
 
 // ── 1. User ─────────────────────────────────────────────────────────────
@@ -102,17 +73,22 @@ model User {
   addresses Address[]
   carts     Cart[]
   items     Item[]
+  orders    Order[]   // NEW — Order now points directly to User (no more via Cart)
   reviews   Reviews[]
-  employee  Employee? // NEW — present only when role = Employee
 
   @@map("User")
 }
 
 // ── 2. Address ──────────────────────────────────────────────────────────
+// Unchanged. This is the customer's saved address book — at checkout, the
+// chosen address gets COPIED into Order's shipping* fields (see below),
+// so editing/deleting a saved address never alters a past order.
 
 model Address {
   addressId    String  @id @default(uuid()) @db.Uuid
   userId       String  @db.Uuid
+  recipientName  String  // NEW
+  recipientPhone String  // NEW
   addressLine1 String
   addressLine2 String?
   landmark     String?
@@ -129,6 +105,7 @@ model Address {
 }
 
 // ── 3. Category ─────────────────────────────────────────────────────────
+// Unchanged.
 
 model Category {
   categoryId   String  @id @default(uuid()) @db.Uuid
@@ -142,6 +119,7 @@ model Category {
 }
 
 // ── 4. Product ──────────────────────────────────────────────────────────
+// Unchanged.
 
 model Product {
   productId    String   @id @default(uuid()) @db.Uuid
@@ -158,17 +136,23 @@ model Product {
   reviews  Reviews[]
 
   @@index([categoryId])
+  @@unique([categoryId, productName])
   @@map("Product")
 }
 
 // ── 5. ProductVariant ───────────────────────────────────────────────────
+// NEW: stockQuantity. This IS your inventory system now — a blank cap or
+// hoodie before customization isn't a separate "Material," it's just this
+// row. One number, decremented when an order is confirmed, nothing to
+// keep in sync across two systems.
 
 model ProductVariant {
-  variantId String  @id @default(uuid()) @db.Uuid
-  productId String  @db.Uuid
-  colour    String?
-  size      String?
-  price     Decimal @db.Decimal(10, 2)
+  variantId     String  @id @default(uuid()) @db.Uuid
+  productId     String  @db.Uuid
+  colour        String?
+  size          String?
+  price         Decimal @db.Decimal(10, 2)
+  stockQuantity Int     @default(0) // NEW
 
   product Product @relation(fields: [productId], references: [productId], onDelete: Cascade)
   items   Item[]
@@ -178,63 +162,120 @@ model ProductVariant {
 }
 
 // ── 6. Item ─────────────────────────────────────────────────────────────
+// REDESIGNED: cartId / orderId are now real, nullable FKs instead of
+// Cart.itemIds being a JSON array. An Item is created with cartId set and
+// orderId null while it's in a cart; at checkout, orderId gets set (and
+// cartId can be cleared or left as provenance — your call at the service
+// layer). The database now enforces this relationship; no orphaned IDs
+// possible.
 
 model Item {
   itemId                 String   @id @default(uuid()) @db.Uuid
   userId                 String?  @db.Uuid
+  cartId                 String?  @db.Uuid // NEW
+  orderId                String?  @db.Uuid // NEW
   variantId              String   @db.Uuid
   customizationLogoFront String?
   customizationLogoBack  String?
-  unitPrice              Decimal  @db.Decimal(10, 2)
-  quantity               Int      @default(1)
-  createdAt              DateTime @default(now())
+  unitPrice              Decimal  @db.Decimal(10, 2) // frozen at time of adding
+  quantity                Int     @default(1)
+  createdAt               DateTime @default(now())
 
   user    User?          @relation(fields: [userId], references: [uid], onDelete: Cascade)
+  cart    Cart?          @relation(fields: [cartId], references: [cartId], onDelete: Cascade)
+  order   Order?         @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
   variant ProductVariant @relation(fields: [variantId], references: [variantId])
 
   @@index([userId])
+  @@index([cartId])
+  @@index([orderId])
   @@index([variantId])
   @@map("Item")
 }
 
 // ── 7. Cart ─────────────────────────────────────────────────────────────
+// REDESIGNED: no more itemIds Json array. Cart now owns its Items through
+// a real relation. No orders relation anymore — see Order below for why.
 
 model Cart {
   cartId    String   @id @default(uuid()) @db.Uuid
-  userId    String?  @db.Uuid
+  userId    String?  @unique @db.Uuid 
   sessionId String?
-  itemIds   Json     @default("[]") @db.JsonB
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
-  user   User?   @relation(fields: [userId], references: [uid], onDelete: Cascade)
-  orders Order[]
+  user  User?  @relation(fields: [userId], references: [uid], onDelete: Cascade)
+  items Item[]
 
   @@index([userId])
   @@map("Cart")
 }
 
 // ── 8. Order ────────────────────────────────────────────────────────────
+// REDESIGNED, several changes:
+//   - No more cartId. Order owns its Items directly (Item.orderId) — once
+//     placed, an order has zero runtime dependency on the cart that
+//     produced it. Genuine decoupling, not just moving the same coupling
+//     elsewhere.
+//   - userId is now direct and required (checkout requires an account).
+//     onDelete: Restrict — same reasoning as Payment below: a user being
+//     removed should never silently erase order history.
+//   - shipping* fields are a SNAPSHOT of the chosen Address at checkout
+//     time, not a live FK — same "freeze it" principle as Item.unitPrice.
+//     Editing a saved Address later must never rewrite a past order's
+//     shipping details.
+//   - subtotal / discountAmount / shippingCost / totalAmount are all
+//     stored explicitly rather than derived on the fly, so an order's
+//     final bill never silently changes if a coupon or product record
+//     changes later.
+//   - couponId is nullable and SetNull on delete — losing the coupon
+//     reference never loses the discount that was already applied.
+//   - trackingId / courierName are plain nullable strings: manual
+//     shipping for now, same "hold it manual" approach as Payment.
 
 model Order {
   orderId     String      @id @default(uuid()) @db.Uuid
-  cartId      String      @db.Uuid
+  userId      String      @db.Uuid
   status      OrderStatus @default(pending)
-  totalAmount Decimal     @db.Decimal(10, 2)
 
-  cart     Cart      @relation(fields: [cartId], references: [cartId])
-  payments Payment[]
-  reviews  Reviews[]
-  printJob PrintJob? // NEW — 1:1, the production job behind this order
+  subtotal       Decimal @db.Decimal(10, 2)
+  discountAmount Decimal @default(0) @db.Decimal(10, 2)
+  shippingCost   Decimal @default(0) @db.Decimal(10, 2)
+  totalAmount    Decimal @db.Decimal(10, 2)
 
-  @@index([cartId])
+  couponId String? @db.Uuid
+
+  shippingName         String
+  shippingPhone        String
+  shippingAddressLine1 String
+  shippingAddressLine2 String?
+  shippingCity         String
+  shippingState        String
+  shippingPincode      String
+  shippingCountry      String  @default("India")
+
+  trackingId  String?
+  courierName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  user       User             @relation(fields: [userId], references: [uid], onDelete: Restrict)
+  coupon     Coupon?          @relation(fields: [couponId], references: [couponId], onDelete: SetNull)
+  items      Item[]
+  payments   Payment[]
+  reviews    Reviews[]
+  statusLogs OrderStatusLog[]
+
+  @@index([userId])
+  @@index([couponId])
   @@map("Order")
 }
 
 // ── 9. Payment ──────────────────────────────────────────────────────────
-// onDelete changed from Cascade -> Restrict: a Payment is a financial
-// record and should never silently disappear because its Order was
-// deleted. Deleting an Order with payments now fails loudly instead.
+// Unchanged shape. paymentMode/gatewayTxnId stay generic strings — Rajesh
+// marking a manual UPI/cash payment paid today, and wiring in Razorpay
+// later, are both just filling in the same fields.
 
 model Payment {
   paymentId    String        @id @default(uuid()) @db.Uuid
@@ -251,7 +292,47 @@ model Payment {
   @@map("Payment")
 }
 
-// ── 10. Reviews ─────────────────────────────────────────────────────────
+// ── 10. Coupon (NEW) ────────────────────────────────────────────────────
+
+model Coupon {
+  couponId          String       @id @default(uuid()) @db.Uuid
+  code              String       @unique
+  type              DiscountType
+  value             Decimal      @db.Decimal(10, 2) // % if Percentage, ₹ if Flat
+  minOrderAmount    Decimal?     @db.Decimal(10, 2)
+  maxDiscountAmount Decimal?     @db.Decimal(10, 2) // caps a Percentage discount
+  validFrom         DateTime?
+  validUntil        DateTime?
+  usageLimit        Int?
+  usageCount        Int          @default(0)
+  isActive          Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+
+  orders Order[]
+
+  @@map("Coupon")
+}
+
+// ── 11. OrderStatusLog (NEW) ────────────────────────────────────────────
+// Lightweight, generic, no employee tie-in — just enough to render the
+// "Order Placed → Payment Confirmed → Processing → Shipped" timeline for
+// the customer. Nothing here needs to change if you later add staff.
+
+model OrderStatusLog {
+  historyId String      @id @default(uuid()) @db.Uuid
+  orderId   String      @db.Uuid
+  status    OrderStatus
+  note      String?
+  changedAt DateTime    @default(now())
+
+  order Order @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("OrderStatusLog")
+}
+
+// ── 12. Reviews ─────────────────────────────────────────────────────────
+// Unchanged.
 
 model Reviews {
   rid       String   @id @default(uuid()) @db.Uuid
@@ -271,125 +352,16 @@ model Reviews {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// NEW — Production / Inventory / Employee layer
-// ─────────────────────────────────────────────────────────────────────────
-
-// ── 11. Employee ────────────────────────────────────────────────────────
-// 1:1 with User (auth stays unified — an Employee just has role=Employee
-// on their User row, plus this row for staff-specific fields).
-
-model Employee {
-  employeeId   String             @id @default(uuid()) @db.Uuid
-  userId       String             @unique @db.Uuid
-  department   EmployeeDepartment @default(General)
-  designation  String?
-  isActive     Boolean            @default(true)
-  joinedAt     DateTime           @default(now())
-
-  user             User            @relation(fields: [userId], references: [uid], onDelete: Cascade)
-  assignedJobs     PrintJob[]      @relation("AssignedEmployee")
-  stageChangesMade JobStageHistory[]
-
-  @@index([department])
-  @@map("Employee")
-}
-
-// ── 12. PrintJob ────────────────────────────────────────────────────────
-// One row per Order (1:1) — the internal production record. Order.status
-// stays the coarse customer-facing state (pending/confirmed/shipped/...);
-// PrintJob.stage is the finer-grained internal pipeline state that the
-// Employee Panel moves through and the customer's tracking page reads.
-
-model PrintJob {
-  jobId                String          @id @default(uuid()) @db.Uuid
-  orderId               String          @unique @db.Uuid
-  assignedEmployeeId    String?         @db.Uuid
-  stage                 ProductionStage @default(DesignReview)
-  priority               String          @default("Standard") // "Standard" | "Urgent"
-  notes                 String?
-  estimatedCompletionAt DateTime?
-  startedAt              DateTime?
-  completedAt            DateTime?
-  createdAt              DateTime        @default(now())
-
-  order            Order             @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
-  assignedEmployee Employee?         @relation("AssignedEmployee", fields: [assignedEmployeeId], references: [employeeId], onDelete: SetNull)
-  stageHistory     JobStageHistory[]
-  materialUsage    MaterialUsage[]
-
-  @@index([assignedEmployeeId])
-  @@index([stage])
-  @@map("PrintJob")
-}
-
-// ── 13. JobStageHistory ─────────────────────────────────────────────────
-// Audit trail of every stage transition — this is what powers the
-// customer-facing "Order Placed → Design Approved → Printing → ..."
-// timeline, and gives you accountability for who moved a job and when.
-
-model JobStageHistory {
-  historyId       String          @id @default(uuid()) @db.Uuid
-  jobId           String          @db.Uuid
-  fromStage       ProductionStage?
-  toStage         ProductionStage
-  changedByEmployeeId String?     @db.Uuid
-  note            String?
-  changedAt       DateTime        @default(now())
-
-  job             PrintJob  @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
-  changedByEmployee Employee? @relation(fields: [changedByEmployeeId], references: [employeeId], onDelete: SetNull)
-
-  @@index([jobId])
-  @@map("JobStageHistory")
-}
-
-// ── 14. Material ────────────────────────────────────────────────────────
-// Stock of raw materials — paper, ink, plates, binding supplies, etc.
-
-model Material {
-  materialId        String       @id @default(uuid()) @db.Uuid
-  name              String       @unique
-  unit              MaterialUnit
-  currentStock      Decimal      @default(0) @db.Decimal(12, 2)
-  reorderThreshold  Decimal      @default(0) @db.Decimal(12, 2)
-  unitCost          Decimal      @db.Decimal(10, 2)
-  updatedAt         DateTime     @default(now()) @updatedAt
-
-  usage MaterialUsage[]
-
-  @@map("Material")
-}
-
-// ── 15. MaterialUsage ───────────────────────────────────────────────────
-// One row per material consumption event on a job — this is what the
-// Inventory Service deducts from Material.currentStock, and what lets
-// you cost out a job after the fact.
-
-model MaterialUsage {
-  usageId      String   @id @default(uuid()) @db.Uuid
-  jobId        String   @db.Uuid
-  materialId   String   @db.Uuid
-  quantityUsed Decimal  @db.Decimal(12, 2)
-  usedAt       DateTime @default(now())
-
-  job      PrintJob @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
-  material Material @relation(fields: [materialId], references: [materialId], onDelete: Restrict)
-
-  @@index([jobId])
-  @@index([materialId])
-  @@map("MaterialUsage")
-}
-
-// ─────────────────────────────────────────────────────────────────────────
 // Apply via raw SQL / migration after `prisma migrate dev`:
 //
-// 1. CHECK constraint: rating between 1 and 5 on Reviews (unchanged from v6).
-// 2. Trigger to keep Product.rating / reviewCount in sync (unchanged from v6).
-// 3. GIN index on Cart.itemIds (unchanged from v6):
-//    create index idx_cart_itemids_gin on "Cart" using gin ("itemIds");
-// 4. NEW — a trigger (or application-layer service call) that decrements
-//    Material.currentStock whenever a MaterialUsage row is inserted, and
-//    optionally raises a low-stock event when currentStock < reorderThreshold.
-//    Keeping this as a trigger means stock can never drift out of sync
-//    even if someone writes MaterialUsage rows outside the app.
+// 1. CHECK constraint: rating between 1 and 5 on Reviews.
+// 2. Trigger to keep Product.rating / reviewCount in sync on Reviews
+//    insert/update/delete.
+// 3. Application-layer (or trigger): decrement ProductVariant.stockQuantity
+//    when an Order moves to paymentConfirmed; raise a low-stock signal
+//    when stockQuantity drops below a threshold you define at the app
+//    layer (no separate low-stock table needed for a single-admin shop —
+//    a simple query `WHERE stockQuantity < N` on the admin dashboard is
+//    enough; add a real threshold column later only if it needs to vary
+//    per variant).
 // ─────────────────────────────────────────────────────────────────────────

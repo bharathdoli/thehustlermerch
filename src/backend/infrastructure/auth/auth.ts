@@ -5,6 +5,8 @@ import Credentials from "next-auth/providers/credentials";
 import { prisma } from "../../../lib/db/prisma";
 import { JWT } from "next-auth/jwt";
 import { UserRole } from "@/src/generated/prisma/enums";
+import { AppError } from "../../shared/errors/api/AppError";
+import bcrypt from "bcryptjs";
 
  
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -19,7 +21,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             async authorize(credentials) {
 
                 if(!credentials){
-                    throw new Error("Credentials not Found!")
+                    throw new AppError("Credentials not Found!",404)
                 }
 
                 console.log("Credentials : " + credentials)
@@ -37,11 +39,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     email: true,
                     password: true,
                     role: true,
-                    employee: {
-                    select: {
-                        employeeId: true,
-                    },
-                    },
                 },
                 });
 
@@ -53,23 +50,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 console.log("DB Password:", user.password);
 
                 if(!user.password){
-                    throw new Error("Password is required");
+                    throw new AppError("Password is required",400);
                 }
 
-                // const valid = await bcrypt.compare(
-                //      password,
-                //     user.password
-                // );
+                const valid = await bcrypt.compare(
+                     password,
+                    user.password
+                );
 
-                // if (!valid)
-                //     return null;
+                if (!valid)
+                    return null;
 
                 return {
                 id: user.uid,
                 name: user.uname, 
                 email: user.email,
-                role: user.role,
-                employeeId: user.employee?.employeeId ?? null,
+                role: user.role
                 };
             }
         })
@@ -78,7 +74,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   async jwt({ token, user }) {
     if (user) {
       token.role = user.role;
-      token.employeeId = user.employeeId;
     }
 
     return token;
@@ -87,13 +82,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   async session({ session, token }) {
     const jwt = token as JWT & {
       role: UserRole;
-      employeeId?: string | null;
     };
 
     if (session.user) {
       session.user.id = jwt.sub!;
       session.user.role = jwt.role;
-      session.user.employeeId = jwt.employeeId;
     }
 
     return session;

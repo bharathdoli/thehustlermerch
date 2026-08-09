@@ -21,8 +21,8 @@ export const CreateProductSchema = z.object({
         .optional()
         .or(z.literal("")),
     
-    rating: z.number().multipleOf(0.01),
-    reviewCount: z.number(),
+    rating: z.number().multipleOf(0.01).optional(),
+    reviewCount: z.number().optional(),
 });
 
 export type CreateProductInput =

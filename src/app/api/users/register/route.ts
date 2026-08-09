@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { registerUser } from "../../../../backend/infrastructure/auth/register.usecase";
+import { handleApiError } from "@/src/backend/shared/errors/api/handle-api-error";
 
 export async function POST(request: Request) {
 
@@ -9,6 +10,8 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     const user = await registerUser(body);
+
+    console.log(user);
 
     return NextResponse.json(
       {
@@ -21,21 +24,9 @@ export async function POST(request: Request) {
       }
     );
 
-  } catch (error) {
-
-    return NextResponse.json(
-      {
-        success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Internal Server Error",
-      },
-      {
-        status: 400,
-      }
-    );
-
-  }
+  } 
+  catch (error) {
+  return handleApiError(error);
+}
 
 }

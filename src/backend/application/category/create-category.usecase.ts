@@ -6,6 +6,7 @@ import {
 } from "../../../schema/category.schema";
 
 import { requireAdmin } from "../../shared/auth/session-validation";
+import { AppError } from "../../shared/errors/api/AppError";
 
 export async function createCategoryUseCase(
     input: CreateCategoryInput
@@ -23,7 +24,7 @@ export async function createCategoryUseCase(
     });
 
     if (exists) {
-        throw new Error("Category already exists.");
+        throw new AppError("Category already exists.",409);
     }
 
     const category = await prisma.category.create({

@@ -1,6 +1,5 @@
 "use client";
 
-import { auth } from "@/src/backend/infrastructure/auth/auth";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";

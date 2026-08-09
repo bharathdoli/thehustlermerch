@@ -11,17 +11,12 @@ export async function listProductUseCase() {
     });
 
     return Product.map(product => ({
-
+        categoryId: product.categoryId,
         productId: product.productId,
-
         productName: product.productName,
-
         description: product.description,
-
         imageUrl: product.productImage,
-         rating:product.rating,
-            reviewCount:product.reviewCount
-
+        rating:product.rating,
+        reviewCount:product.reviewCount
     }));
-
 }

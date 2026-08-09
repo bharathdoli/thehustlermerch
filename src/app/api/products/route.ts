@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createProductUseCase } from "@/src/backend/application/product/create-product.usecase";
 import { listProductUseCase } from "@/src/backend/application/product/list-products.usecase";
+import { handleApiError } from "@/src/backend/shared/errors/api/handle-api-error";
 
 export async function POST(request: Request) {
 
@@ -19,26 +20,19 @@ export async function POST(request: Request) {
 
     } catch (error) {
 
-        return NextResponse.json(
-            {
-                message:
-                    error instanceof Error
-                        ? error.message
-                        : "Internal Server Error"
-            },
-            {
-                status: 400
-            }
-        );
+        return handleApiError(error);
 
-    }
-
+}
 }
 
 export async function GET() {
 
-    const products = await listProductUseCase();
-
-    return NextResponse.json(products);
+    try {
+        const products = await listProductUseCase();
+    
+        return NextResponse.json(products);
+    } catch (error) {
+      return  handleApiError(error);
+    }
 
 }

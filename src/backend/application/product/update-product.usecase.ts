@@ -1,6 +1,7 @@
 import { prisma } from "@/src/lib/db/prisma";
 import { requireAdmin } from "../../shared/auth/session-validation";
 import { UpdateProductInput, UpdateProductSchema } from "@/src/schema/product.schema";
+import { AppError } from "../../shared/errors/api/AppError";
 
 
 
@@ -24,7 +25,7 @@ export async function updateProductUseCase(
   });
 
   if (!existingProduct) {
-    throw new Error("Product not found.");
+    throw new AppError("Product not found.",404);
   }
 
   // Prevent duplicate names
@@ -39,7 +40,7 @@ export async function updateProductUseCase(
     });
 
     if (duplicate) {
-      throw new Error("Product name already exists.");
+      throw new AppError("Product name already exists.",409);
     }
   }
 
@@ -56,7 +57,7 @@ export async function updateProductUseCase(
     ProductName: Product.productName,
     description: Product.description,
     imageUrl: Product.productImage,
-     rating:Product.rating,
+    rating:Product.rating,
     reviewCount:Product.reviewCount
   };
 }

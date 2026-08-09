@@ -1,5 +1,6 @@
 import { prisma } from "@/src/lib/db/prisma";
 import { requireAdmin } from "../../shared/auth/session-validation";
+import { AppError } from "../../shared/errors/api/AppError";
 
 export async function deleteCategoryUseCase(categoryId: string) {
 
@@ -14,7 +15,7 @@ export async function deleteCategoryUseCase(categoryId: string) {
   });
 
   if (!category) {
-    throw new Error("Category not found.");
+    throw new AppError("Category not found.",404);
   }
 
   // Delete

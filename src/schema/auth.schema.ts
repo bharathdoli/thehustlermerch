@@ -21,6 +21,8 @@ export const RegisterSchema = z.object({
   phoneNo: z
     .string()
     .regex(/^[6-9]\d{9}$/, "Invalid Indian phone number"),
+
+  role: z.enum(['Admin','Customer'])
 });
 
 export type RegisterInput = z.infer<typeof RegisterSchema>;
