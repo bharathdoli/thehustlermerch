@@ -6,6 +6,10 @@ export async function listProductUseCase() {
 
         orderBy: {
             productName: "asc"
+        },
+
+        include: {
+            variants: true
         }
 
     });
@@ -15,8 +19,9 @@ export async function listProductUseCase() {
         productId: product.productId,
         productName: product.productName,
         description: product.description,
-        imageUrl: product.productImage,
-        rating:product.rating,
-        reviewCount:product.reviewCount
+        productImage: product.productImage,
+        rating: product.rating,
+        reviewCount: product.reviewCount,
+        variants: product.variants
     }));
 }

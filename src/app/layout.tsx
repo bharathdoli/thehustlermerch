@@ -2,6 +2,14 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+import { ThemeProvider } from "@/src/context/ThemeContext";
+import { CartProvider } from "@/src/context/CartContext";
+import { AuthProvider } from "@/src/context/AuthContext";
+
+import SessionProviderWrapper from "@/src/components/SessionProviderWrapper";
+import Header from "@/src/components/Header";
+import AnnouncementBar from "@/src/components/AnnouncementBar";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -19,15 +27,25 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <SessionProviderWrapper>
+          <AuthProvider>
+            <ThemeProvider>
+              <CartProvider>
+                <AnnouncementBar />
+                <Header />
+                {children}
+              </CartProvider>
+            </ThemeProvider>
+          </AuthProvider>
+        </SessionProviderWrapper>
+      </body>
     </html>
   );
 }

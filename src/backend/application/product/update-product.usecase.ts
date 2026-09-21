@@ -32,7 +32,7 @@ export async function updateProductUseCase(
   if (data.productName) {
     const duplicate = await prisma.product.findFirst({
       where: {
-        ProductName: data.productName,
+        productName: data.productName,
         NOT: {
           productId:ProductId,
         },
@@ -56,7 +56,7 @@ export async function updateProductUseCase(
     ProductId: Product.productId,
     ProductName: Product.productName,
     description: Product.description,
-    imageUrl: Product.productImage,
+    productImage: Product.productImage,
     rating:Product.rating,
     reviewCount:Product.reviewCount
   };

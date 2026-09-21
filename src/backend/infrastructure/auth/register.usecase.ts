@@ -56,6 +56,4 @@ export async function registerUser(input:RegisterInput){
     email: user.email,
     role: user.role,
   };
-
-
 }

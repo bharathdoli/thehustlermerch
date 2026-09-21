@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSession, signOut } from "next-auth/react";
 import { useCart } from "@/src/context/CartContext";
-import { useAuth } from "@/src/context/AuthContext";
-import { SIGNAL, hexToRgba, useTheme, ThemeToggle } from "@/src/context/ThemeContext";
+import { SIGNAL, useTheme, ThemeToggle } from "@/src/context/ThemeContext";
 
 const NAV_LINKS = [
   { label: "Home", href: "/" },
@@ -17,139 +17,765 @@ const NAV_LINKS = [
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+
+  const accountRef = useRef<HTMLDivElement>(null);
   const { itemCount } = useCart();
-  const { user, isAuthenticated, logout } = useAuth();
+
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === "authenticated";
+  const user = session?.user;
+
   const { colors } = useTheme();
 
+  /* Prevent background scrolling when mobile menu is open */
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
+
     return () => {
       document.body.style.overflow = "";
     };
   }, [menuOpen]);
 
+  /* Close account dropdown when clicking outside */
+  useEffect(() => {
+    if (!accountOpen) return;
+
+    const handleClick = (e: MouseEvent) => {
+      if (
+        accountRef.current &&
+        !accountRef.current.contains(e.target as Node)
+      ) {
+        setAccountOpen(false);
+      }
+    };
+
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setAccountOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [accountOpen]);
+
   return (
     <header
-      className="sticky top-0 z-40 border-b backdrop-blur"
-      style={{ borderColor: colors.line, backgroundColor: hexToRgba(colors.bg, 0.95) }}
+      className="sticky top-0 z-40 w-full border-b"
+      style={{
+        borderColor: colors.line,
+        /*
+         * IMPORTANT:
+         * Use a solid background instead of hexToRgba(..., 0.95)
+         * so the page content cannot show through on mobile.
+         */
+        backgroundColor: colors.bg,
+        backgroundImage: "none",
+      }}
     >
-      {/* Global theme toggle lives here so it's on every page */}
       <ThemeToggle />
 
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
-        <Link href="/" className="font-display text-2xl uppercase tracking-tight" style={{ color: colors.text }}>
+      {/* Main header */}
+      <div
+        className="
+          mx-auto
+          flex
+          min-h-[64px]
+          w-full
+          max-w-7xl
+          items-center
+          justify-between
+          gap-3
+          px-4
+          py-3
+          sm:min-h-[72px]
+          sm:px-6
+          sm:py-4
+          lg:px-8
+        "
+      >
+        {/* Logo */}
+        <Link
+          href="/"
+          className="
+            min-w-0
+            max-w-[48vw]
+            shrink
+            truncate
+            font-display
+            text-xl
+            uppercase
+            tracking-tight
+            sm:max-w-none
+            sm:text-2xl
+          "
+          style={{ color: colors.text }}
+        >
           The Hustler<span style={{ color: SIGNAL }}>.</span>
         </Link>
 
-        <nav className="hidden items-center gap-8 md:flex">
+        {/* Desktop Navigation */}
+        <nav
+          className="
+            hidden
+            items-center
+            gap-5
+            md:flex
+            lg:gap-8
+          "
+        >
           {NAV_LINKS.map((link) => (
             <Link
               key={link.label}
               href={link.href}
-              className="font-mono text-xs uppercase tracking-widest transition hover:opacity-100"
-              style={{ color: colors.textMuted }}
+              className="
+                whitespace-nowrap
+                font-mono
+                text-[11px]
+                uppercase
+                tracking-widest
+                transition-opacity
+                hover:opacity-100
+                lg:text-xs
+              "
+              style={{
+                color: colors.textMuted,
+              }}
             >
               {link.label}
             </Link>
           ))}
         </nav>
 
-        <div className="flex items-center gap-4 sm:gap-5">
+        {/* Header Actions */}
+        <div
+          className="
+            flex
+            shrink-0
+            items-center
+            gap-3
+            sm:gap-4
+            lg:gap-5
+          "
+        >
+          {/* Search */}
           <button
+            type="button"
             aria-label="Search"
+            aria-expanded={searchOpen}
             onClick={() => setSearchOpen((v) => !v)}
-            className="transition hover:opacity-80"
-            style={{ color: colors.text, opacity: 0.8 }}
+            className="
+              flex
+              h-9
+              w-9
+              items-center
+              justify-center
+              rounded-sm
+              transition-opacity
+              hover:opacity-80
+              sm:h-auto
+              sm:w-auto
+            "
+            style={{
+              color: colors.text,
+              opacity: 0.85,
+            }}
           >
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="19"
+              height="19"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
               <circle cx="11" cy="11" r="7" />
               <path d="m21 21-4.3-4.3" />
             </svg>
           </button>
+
+          {/* Desktop Account */}
           {isAuthenticated ? (
-            <button
-              aria-label="Log out"
-              title={`Signed in as ${user?.name} — click to log out`}
-              onClick={logout}
-              className="hidden items-center gap-1.5 transition hover:opacity-80 sm:flex"
-              style={{ color: colors.text }}
+            <div
+              className="relative hidden sm:block"
+              ref={accountRef}
             >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full font-mono text-[10px] font-bold" style={{ backgroundColor: SIGNAL, color: "#131210" }}>
-                {user?.name?.charAt(0).toUpperCase()}
-              </span>
-            </button>
+              <button
+                type="button"
+                aria-label="Account"
+                aria-expanded={accountOpen}
+                onClick={() => setAccountOpen((v) => !v)}
+                className="
+                  flex
+                  items-center
+                  gap-1.5
+                  transition-opacity
+                  hover:opacity-80
+                "
+                style={{ color: colors.text }}
+              >
+                <span
+                  className="
+                    flex
+                    h-7
+                    w-7
+                    items-center
+                    justify-center
+                    rounded-full
+                    font-mono
+                    text-[10px]
+                    font-bold
+                  "
+                  style={{
+                    backgroundColor: SIGNAL,
+                    color: "#131210",
+                  }}
+                >
+                  {user?.name?.charAt(0).toUpperCase()}
+                </span>
+              </button>
+
+              {/* Account Dropdown */}
+              {accountOpen && (
+                <div
+                  className="
+                    absolute
+                    right-0
+                    top-full
+                    z-50
+                    mt-3
+                    w-64
+                    border
+                    font-mono
+                    text-xs
+                    shadow-xl
+                  "
+                  style={{
+                    borderColor: colors.lineStrong,
+                    backgroundColor: colors.bg,
+                    backgroundImage: "none",
+                  }}
+                >
+                  <div
+                    className="border-b p-4"
+                    style={{ borderColor: colors.line }}
+                  >
+                    <p
+                      className="
+                        truncate
+                        text-sm
+                        font-bold
+                        tracking-wide
+                      "
+                      style={{ color: colors.text }}
+                    >
+                      {user?.name}
+                    </p>
+
+                    <p
+                      className="mt-1 truncate tracking-wide"
+                      style={{ color: colors.textMuted }}
+                    >
+                      {user?.email}
+                    </p>
+                  </div>
+
+                  <Link
+                    href="/account"
+                    onClick={() => setAccountOpen(false)}
+                    className="
+                      block
+                      w-full
+                      border-b
+                      px-4
+                      py-3
+                      text-left
+                      uppercase
+                      tracking-widest
+                      transition-opacity
+                      hover:opacity-70
+                    "
+                    style={{
+                      color: colors.text,
+                      borderColor: colors.line,
+                    }}
+                  >
+                    My Account
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountOpen(false);
+                      signOut({ callbackUrl: "/" });
+                    }}
+                    className="
+                      w-full
+                      px-4
+                      py-3
+                      text-left
+                      uppercase
+                      tracking-widest
+                      transition-opacity
+                      hover:opacity-70
+                    "
+                    style={{ color: SIGNAL }}
+                  >
+                    Log out
+                  </button>
+                </div>
+              )}
+            </div>
           ) : (
-            <Link aria-label="Log in" href="/login" className="hidden transition hover:opacity-80 sm:block" style={{ color: colors.text, opacity: 0.8 }}>
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            /* Desktop Login */
+            <Link
+              aria-label="Log in"
+              href="/login"
+              className="
+                hidden
+                transition-opacity
+                hover:opacity-80
+                sm:block
+              "
+              style={{
+                color: colors.text,
+                opacity: 0.85,
+              }}
+            >
+              <svg
+                width="19"
+                height="19"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
                 <circle cx="12" cy="8" r="4" />
                 <path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6" />
               </svg>
             </Link>
           )}
-          <button aria-label="Wishlist" className="relative hidden transition hover:opacity-80 sm:block" style={{ color: colors.text, opacity: 0.8 }}>
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+
+          {/* Wishlist - desktop/tablet */}
+          <button
+            type="button"
+            aria-label="Wishlist"
+            className="
+              relative
+              hidden
+              transition-opacity
+              hover:opacity-80
+              sm:block
+            "
+            style={{
+              color: colors.text,
+              opacity: 0.85,
+            }}
+          >
+            <svg
+              width="19"
+              height="19"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
               <path d="M12 20s-7-4.4-9.5-8.8C.8 7.8 2.4 4.5 5.8 4c2-.3 3.7.7 4.9 2.3C11.9 4.7 13.6 3.7 15.6 4c3.4.5 5 3.8 3.3 7.2C17.4 15.6 12 20 12 20z" />
             </svg>
-            <span className="absolute -right-2 -top-2 flex h-4 w-4 items-center justify-center rounded-full font-mono text-[9px] font-bold" style={{ backgroundColor: SIGNAL, color: "#131210" }}>0</span>
-          </button>
-          <Link href="/cart" aria-label="Cart" className="relative transition hover:opacity-80" style={{ color: colors.text, opacity: 0.8 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M6 6h15l-1.5 9h-12z" />
-              <path d="M6 6 5 2H2" />
-              <circle cx="9" cy="20" r="1.3" />
-              <circle cx="17" cy="20" r="1.3" />
-            </svg>
-            <span className="absolute -right-2 -top-2 flex h-4 w-4 items-center justify-center rounded-full font-mono text-[9px] font-bold" style={{ backgroundColor: SIGNAL, color: "#131210" }}>
-              {itemCount}
+
+            <span
+              className="
+                absolute
+                -right-2
+                -top-2
+                flex
+                h-4
+                w-4
+                items-center
+                justify-center
+                rounded-full
+                font-mono
+                text-[9px]
+                font-bold
+              "
+              style={{
+                backgroundColor: SIGNAL,
+                color: "#131210",
+              }}
+            >
+              0
             </span>
-          </Link>
-          <button aria-label="Open menu" onClick={() => setMenuOpen(true)} className="transition hover:opacity-80 md:hidden" style={{ color: colors.text, opacity: 0.8 }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          </button>
+
+          {/* Cart */}
+          {/* Cart - visible only when logged in */}
+          {isAuthenticated && (
+            <Link
+              href="/cart"
+              aria-label="Cart"
+              className="
+      relative
+      flex
+      h-9
+      w-9
+      items-center
+      justify-center
+      transition-opacity
+      hover:opacity-80
+      sm:h-auto
+      sm:w-auto
+    "
+              style={{
+                color: colors.text,
+                opacity: 0.85,
+              }}
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
+                <path d="M6 6h15l-1.5 9h-12z" />
+                <path d="M6 6 5 2H2" />
+                <circle cx="9" cy="20" r="1.3" />
+                <circle cx="17" cy="20" r="1.3" />
+              </svg>
+
+              <span
+                className="
+        absolute
+        -right-1
+        -top-1
+        flex
+        h-4
+        w-4
+        items-center
+        justify-center
+        rounded-full
+        font-mono
+        text-[9px]
+        font-bold
+        sm:-right-2
+        sm:-top-2
+      "
+                style={{
+                  backgroundColor: SIGNAL,
+                  color: "#131210",
+                }}
+              >
+                {itemCount}
+              </span>
+            </Link>
+          )}
+
+          {/* Mobile Menu Button */}
+          <button
+            type="button"
+            aria-label="Open menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(true)}
+            className="
+              flex
+              h-9
+              w-9
+              items-center
+              justify-center
+              transition-opacity
+              hover:opacity-80
+              md:hidden
+            "
+            style={{
+              color: colors.text,
+              opacity: 0.85,
+            }}
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
               <path d="M4 7h16M4 12h16M4 17h16" />
             </svg>
           </button>
         </div>
       </div>
 
+      {/* Search Bar */}
       {searchOpen && (
-        <div className="border-t px-5 py-3 sm:px-8" style={{ borderColor: colors.line }}>
-          <input
-            autoFocus
-            type="search"
-            placeholder="Search hoodies, tees, caps…"
-            className="w-full bg-transparent font-mono text-sm focus:outline-none"
-            style={{ color: colors.text }}
-          />
+        <div
+          className="
+            border-t
+            px-4
+            py-3
+            sm:px-6
+            lg:px-8
+          "
+          style={{
+            borderColor: colors.line,
+            backgroundColor: colors.bg,
+            backgroundImage: "none",
+          }}
+        >
+          <div className="mx-auto max-w-7xl">
+            <input
+              autoFocus
+              type="search"
+              placeholder="Search hoodies, tees, caps…"
+              className="
+                w-full
+                bg-transparent
+                font-mono
+                text-sm
+                focus:outline-none
+              "
+              style={{
+                color: colors.text,
+              }}
+            />
+          </div>
         </div>
       )}
 
-      {/* Mobile drawer */}
-      <div className={`fixed inset-0 z-50 transition ${menuOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}>
-        <div className="absolute inset-0 bg-black/60" onClick={() => setMenuOpen(false)} />
+      {/* =========================
+          MOBILE DRAWER
+         ========================= */}
+      <div
+        className={`
+          fixed
+          inset-0
+          z-50
+          transition-opacity
+          duration-300
+          ${menuOpen
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
+          }
+        `}
+      >
+        {/* Overlay */}
         <div
-          className={`absolute right-0 top-0 h-full w-72 max-w-[85vw] transform p-6 transition-transform duration-300 ${menuOpen ? "translate-x-0" : "translate-x-full"}`}
-          style={{ backgroundColor: colors.bg }}
+          className="absolute inset-0 bg-black/60"
+          onClick={() => setMenuOpen(false)}
+        />
+
+        {/* Drawer */}
+        <div
+          className={`
+            absolute
+            right-0
+            top-0
+            flex
+            h-[100dvh]
+            w-[min(340px,88vw)]
+            flex-col
+            transform
+            p-5
+            shadow-2xl
+            transition-transform
+            duration-300
+            sm:w-80
+            sm:p-6
+            ${menuOpen
+              ? "translate-x-0"
+              : "translate-x-full"
+            }
+          `}
+          style={{
+            /*
+             * Fully opaque mobile background.
+             * This prevents the page/hero content from
+             * showing through the drawer.
+             */
+            backgroundColor: colors.bg,
+            backgroundImage: "none",
+            borderLeft: `1px solid ${colors.line}`,
+          }}
         >
-          <div className="mb-8 flex items-center justify-between">
-            <span className="font-display text-xl uppercase" style={{ color: colors.text }}>Menu</span>
-            <button aria-label="Close menu" onClick={() => setMenuOpen(false)} className="transition hover:opacity-80" style={{ color: colors.textMuted }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          {/* Drawer Header */}
+          <div className="mb-6 flex items-center justify-between sm:mb-8">
+            <span
+              className="
+                font-display
+                text-lg
+                uppercase
+                sm:text-xl
+              "
+              style={{ color: colors.text }}
+            >
+              Menu
+            </span>
+
+            <button
+              type="button"
+              aria-label="Close menu"
+              onClick={() => setMenuOpen(false)}
+              className="
+                flex
+                h-9
+                w-9
+                items-center
+                justify-center
+                transition-opacity
+                hover:opacity-80
+              "
+              style={{ color: colors.textMuted }}
+            >
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
             </button>
           </div>
-          <nav className="flex flex-col gap-1">
+
+          {/* Mobile Navigation */}
+          <nav className="flex flex-col">
             {NAV_LINKS.map((link) => (
               <Link
                 key={link.label}
                 href={link.href}
                 onClick={() => setMenuOpen(false)}
-                className="border-b py-3 font-mono text-xs uppercase tracking-widest transition hover:opacity-100"
-                style={{ borderColor: colors.line, color: colors.textMuted }}
+                className="
+                  border-b
+                  py-4
+                  font-mono
+                  text-xs
+                  uppercase
+                  tracking-widest
+                  transition-opacity
+                  hover:opacity-100
+                "
+                style={{
+                  borderColor: colors.line,
+                  color: colors.textMuted,
+                }}
               >
                 {link.label}
               </Link>
             ))}
+
+            {/* Mobile Account */}
+            <div
+              className="
+                mt-5
+                border-t
+                pt-5
+              "
+              style={{
+                borderColor: colors.line,
+              }}
+            >
+              {isAuthenticated ? (
+                <>
+                  <p
+                    className="
+                      truncate
+                      font-mono
+                      text-xs
+                      font-bold
+                      tracking-widest
+                    "
+                    style={{
+                      color: colors.text,
+                    }}
+                  >
+                    {user?.name}
+                  </p>
+
+                  <p
+                    className="
+                      mt-1
+                      truncate
+                      font-mono
+                      text-[11px]
+                      tracking-widest
+                    "
+                    style={{
+                      color: colors.textMuted,
+                    }}
+                  >
+                    {user?.email}
+                  </p>
+
+                  <Link
+                    href="/account"
+                    onClick={() => setMenuOpen(false)}
+                    className="
+                      mt-4
+                      block
+                      font-mono
+                      text-xs
+                      uppercase
+                      tracking-widest
+                    "
+                    style={{
+                      color: colors.text,
+                    }}
+                  >
+                    My Account
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      signOut({ callbackUrl: "/" });
+                    }}
+                    className="
+                      mt-4
+                      font-mono
+                      text-xs
+                      uppercase
+                      tracking-widest
+                    "
+                    style={{
+                      color: SIGNAL,
+                    }}
+                  >
+                    Log out
+                  </button>
+                </>
+              ) : (
+                <Link
+                  href="/login"
+                  onClick={() => setMenuOpen(false)}
+                  className="
+                    font-mono
+                    text-xs
+                    uppercase
+                    tracking-widest
+                  "
+                  style={{
+                    color: colors.text,
+                  }}
+                >
+                  Log in
+                </Link>
+              )}
+            </div>
           </nav>
         </div>
       </div>

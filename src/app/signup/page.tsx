@@ -3,18 +3,19 @@
 import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAuth } from "@/src/context/AuthContext";
-import { useCart } from "@/src/context/CartContext";
+import { signIn } from "next-auth/react";
 import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
 
 const PENDING_CART_KEY = "hustler-pending-cart-item";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const redirectTo = searchParams.get("redirect") || "/";
-  const { signup } = useAuth();
-  const { addToCart } = useCart();
+
   const { colors } = useTheme();
 
   const [name, setName] = useState("");
@@ -22,23 +23,47 @@ function SignupForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [phoneNo, setPhoneNo] = useState("");
-  const [role, setRole] = useState<"Customer" | "Admin">("Customer");
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function completeRedirect() {
+  async function completeRedirect() {
     try {
       const pending = sessionStorage.getItem(PENDING_CART_KEY);
+
       if (pending) {
-        addToCart(JSON.parse(pending));
+        const pendingItems = JSON.parse(pending);
+
+        for (const item of pendingItems) {
+          const response = await fetch("/api/cart", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              variantId: item.variantId,
+              quantity: item.quantity,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to restore cart item.");
+          }
+        }
+
         sessionStorage.removeItem(PENDING_CART_KEY);
+
         router.push("/cart");
+        router.refresh();
         return;
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      console.error("Failed to restore pending cart:", error);
     }
+
     router.push(redirectTo);
+    router.refresh();
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -51,112 +76,370 @@ function SignupForm() {
     }
 
     setLoading(true);
-    const result = await signup(name, email, password, phoneNo, role);
-    setLoading(false);
 
-    if (!result.success) {
-      setError(result.error ?? "Something went wrong.");
+    /*
+     * Register the user.
+     *
+     * IMPORTANT:
+     * Do NOT send a role from the frontend.
+     * The backend must always create public registrations
+     * as "Customer".
+     */
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          phoneNo,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        // Zod validation errors
+        if (data.errors) {
+          const firstField = Object.keys(data.errors)[0];
+          const firstMessage = data.errors[firstField]?.[0];
+
+          setError(
+            firstMessage ??
+            data.message ??
+            "Something went wrong."
+          );
+        } else {
+          setError(
+            data.message ??
+            "Something went wrong."
+          );
+        }
+
+        setLoading(false);
+        return;
+      }
+    } catch {
+      setError(
+        "Could not reach the server. Please try again."
+      );
+
+      setLoading(false);
       return;
     }
+
+    /*
+     * Automatically log the newly created customer in.
+     */
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+
+    setLoading(false);
+
+    if (result?.error) {
+      setError("Account created. Please log in.");
+
+      router.push(
+        `/login?redirect=${encodeURIComponent(redirectTo)}`
+      );
+
+      return;
+    }
+
     completeRedirect();
   }
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-5 py-16 sm:px-8">
-      <span className="font-mono text-[11px] tracking-[0.25em]" style={{ color: SIGNAL }}>Join the crew</span>
-      <h1 className="mt-2 font-display text-4xl uppercase tracking-tight" style={{ color: colors.text }}>Sign Up</h1>
+    <div
+      className="
+        mx-auto
+        flex
+        min-h-[70vh]
+        max-w-md
+        flex-col
+        justify-center
+        px-5
+        py-16
+        sm:px-8
+      "
+    >
+      {/* Heading */}
+      <span
+        className="font-mono text-[11px] tracking-[0.25em]"
+        style={{ color: SIGNAL }}
+      >
+        Join the crew
+      </span>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+      <h1
+        className="
+          mt-2
+          font-display
+          text-4xl
+          uppercase
+          tracking-tight
+        "
+        style={{ color: colors.text }}
+      >
+        Sign Up
+      </h1>
+
+      <form
+        onSubmit={handleSubmit}
+        className="mt-6 space-y-4"
+      >
+        {/* Full Name */}
         <div>
-          <label className="font-mono text-[11px] uppercase tracking-widest" style={{ color: colors.textMuted }}>Full name</label>
+          <label
+            className="
+              font-mono
+              text-[11px]
+              uppercase
+              tracking-widest
+            "
+            style={{ color: colors.textMuted }}
+          >
+            Full name
+          </label>
+
           <input
             type="text"
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Your name"
-            className="mt-2 w-full border px-4 py-3 text-sm focus:outline-none"
-            style={{ borderColor: colors.lineStrong, backgroundColor: colors.panel, color: colors.text }}
+            autoComplete="name"
+            className="
+              mt-2
+              w-full
+              border
+              px-4
+              py-3
+              text-sm
+              focus:outline-none
+            "
+            style={{
+              borderColor: colors.lineStrong,
+              backgroundColor: colors.panel,
+              color: colors.text,
+            }}
           />
         </div>
+
+        {/* Email */}
         <div>
-          <label className="font-mono text-[11px] uppercase tracking-widest" style={{ color: colors.textMuted }}>Email</label>
+          <label
+            className="
+              font-mono
+              text-[11px]
+              uppercase
+              tracking-widest
+            "
+            style={{ color: colors.textMuted }}
+          >
+            Email
+          </label>
+
           <input
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@email.com"
-            className="mt-2 w-full border px-4 py-3 text-sm focus:outline-none"
-            style={{ borderColor: colors.lineStrong, backgroundColor: colors.panel, color: colors.text }}
+            autoComplete="email"
+            className="
+              mt-2
+              w-full
+              border
+              px-4
+              py-3
+              text-sm
+              focus:outline-none
+            "
+            style={{
+              borderColor: colors.lineStrong,
+              backgroundColor: colors.panel,
+              color: colors.text,
+            }}
           />
         </div>
+
+        {/* Phone */}
         <div>
-          <label className="font-mono text-[11px] uppercase tracking-widest" style={{ color: colors.textMuted }}>Phone number</label>
+          <label
+            className="
+              font-mono
+              text-[11px]
+              uppercase
+              tracking-widest
+            "
+            style={{ color: colors.textMuted }}
+          >
+            Phone number
+          </label>
+
           <input
             type="tel"
             required
             value={phoneNo}
             onChange={(e) => setPhoneNo(e.target.value)}
             placeholder="10-digit mobile number"
-            className="mt-2 w-full border px-4 py-3 text-sm focus:outline-none"
-            style={{ borderColor: colors.lineStrong, backgroundColor: colors.panel, color: colors.text }}
+            autoComplete="tel"
+            className="
+              mt-2
+              w-full
+              border
+              px-4
+              py-3
+              text-sm
+              focus:outline-none
+            "
+            style={{
+              borderColor: colors.lineStrong,
+              backgroundColor: colors.panel,
+              color: colors.text,
+            }}
           />
         </div>
+
+        {/* Password */}
         <div>
-          <label className="font-mono text-[11px] uppercase tracking-widest" style={{ color: colors.textMuted }}>Password</label>
+          <label
+            className="
+              font-mono
+              text-[11px]
+              uppercase
+              tracking-widest
+            "
+            style={{ color: colors.textMuted }}
+          >
+            Password
+          </label>
+
           <input
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="At least 8 characters"
-            className="mt-2 w-full border px-4 py-3 text-sm focus:outline-none"
-            style={{ borderColor: colors.lineStrong, backgroundColor: colors.panel, color: colors.text }}
+            autoComplete="new-password"
+            className="
+              mt-2
+              w-full
+              border
+              px-4
+              py-3
+              text-sm
+              focus:outline-none
+            "
+            style={{
+              borderColor: colors.lineStrong,
+              backgroundColor: colors.panel,
+              color: colors.text,
+            }}
           />
         </div>
+
+        {/* Confirm Password */}
         <div>
-          <label className="font-mono text-[11px] uppercase tracking-widest" style={{ color: colors.textMuted }}>Confirm password</label>
+          <label
+            className="
+              font-mono
+              text-[11px]
+              uppercase
+              tracking-widest
+            "
+            style={{ color: colors.textMuted }}
+          >
+            Confirm password
+          </label>
+
           <input
             type="password"
             required
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={(e) =>
+              setConfirmPassword(e.target.value)
+            }
             placeholder="Re-enter password"
-            className="mt-2 w-full border px-4 py-3 text-sm focus:outline-none"
-            style={{ borderColor: colors.lineStrong, backgroundColor: colors.panel, color: colors.text }}
+            autoComplete="new-password"
+            className="
+              mt-2
+              w-full
+              border
+              px-4
+              py-3
+              text-sm
+              focus:outline-none
+            "
+            style={{
+              borderColor: colors.lineStrong,
+              backgroundColor: colors.panel,
+              color: colors.text,
+            }}
           />
         </div>
 
-        {/* See note below about whether this should stay */}
-        <div>
-          <label className="font-mono text-[11px] uppercase tracking-widest" style={{ color: colors.textMuted }}>Account type</label>
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value as "Customer" | "Admin")}
-            className="mt-2 w-full border px-4 py-3 text-sm focus:outline-none"
-            style={{ borderColor: colors.lineStrong, backgroundColor: colors.panel, color: colors.text }}
+        {/* Error */}
+        {error && (
+          <p
+            className="font-mono text-[11px]"
+            style={{ color: SIGNAL }}
           >
-            <option value="Customer">Customer</option>
-            <option value="Admin">Admin</option>
-          </select>
-        </div>
+            {error}
+          </p>
+        )}
 
-        {error && <p className="font-mono text-[11px]" style={{ color: SIGNAL }}>{error}</p>}
-
+        {/* Submit */}
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95 disabled:opacity-50"
-          style={{ backgroundColor: SIGNAL, color: "#131210" }}
+          className="
+            w-full
+            py-3
+            font-mono
+            text-xs
+            font-bold
+            uppercase
+            tracking-widest
+            transition
+            hover:brightness-95
+            disabled:opacity-50
+          "
+          style={{
+            backgroundColor: SIGNAL,
+            color: "#131210",
+          }}
         >
           {loading ? "Creating..." : "Create Account"}
         </button>
       </form>
 
-      <p className="mt-6 text-center font-mono text-[11px]" style={{ color: colors.textMuted }}>
+      {/* Login */}
+      <p
+        className="
+          mt-6
+          text-center
+          font-mono
+          text-[11px]
+        "
+        style={{ color: colors.textMuted }}
+      >
         Already have an account?{" "}
-        <Link href={`/login?redirect=${encodeURIComponent(redirectTo)}`} style={{ color: SIGNAL }} className="hover:underline">
+
+        <Link
+          href={`/login?redirect=${encodeURIComponent(
+            redirectTo
+          )}`}
+          style={{ color: SIGNAL }}
+          className="hover:underline"
+        >
           Log in
         </Link>
       </p>

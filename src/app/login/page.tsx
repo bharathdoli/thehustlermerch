@@ -1,59 +1,11 @@
-// "use client";
-
-// import { signIn } from "next-auth/react";
-// import { useRouter } from "next/navigation";
-// import { useState } from "react";
-
-// export default function LoginPage() {
-
-//   const router = useRouter();
-
-//   const [email, setEmail] = useState("");
-//   const [password, setPassword] = useState("");
-
-//   async function login() {
-
-//     const result = await signIn("credentials", {
-//       email,
-//       password,
-//       redirect: false,
-//     });
-
-//     if (result?.error) {
-//       alert("Invalid Credentials");
-//       return;
-//     }
-
-   
-
-//     router.push("/dashboard");
-//     router.refresh();
-//   }
-
-//   return (
-//     <>
-//       Email <input onChange={(e) => setEmail(e.target.value)} />
-
-//       password  <input
-//         type="password"
-//         onChange={(e) => setPassword(e.target.value)}
-//       />
-
-//       <button onClick={login}>
-//         Login
-//       </button>
-//     </>
-//   );
-// }
-
 "use client";
 
 import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAuth } from "@/src/context/AuthContext";
-import { useCart } from "@/src/context/CartContext";
+import { signIn } from "next-auth/react";
 import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
+import { getSession } from "next-auth/react";
 
 const PENDING_CART_KEY = "hustler-pending-cart-item";
 
@@ -61,8 +13,6 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/";
-  const { login } = useAuth();
-  const { addToCart } = useCart();
   const { colors } = useTheme();
 
   const [email, setEmail] = useState("");
@@ -70,34 +20,72 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function completeRedirect() {
-    // If the user was sent here from "Add to Cart", finish that action now.
+  async function completeRedirect() {
     try {
       const pending = sessionStorage.getItem(PENDING_CART_KEY);
+
       if (pending) {
-        addToCart(JSON.parse(pending));
+        const pendingItems = JSON.parse(pending);
+
+        for (const item of pendingItems) {
+          const response = await fetch("/api/cart", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              variantId: item.variantId,
+              quantity: item.quantity,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to restore cart item.");
+          }
+        }
+
         sessionStorage.removeItem(PENDING_CART_KEY);
+
         router.push("/cart");
+        router.refresh();
         return;
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      console.error("Failed to restore pending cart:", error);
     }
+
     router.push(redirectTo);
+    router.refresh();
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
-
     setLoading(true);
-    const result = await login(email, password);
-    setLoading(false);
 
-    if (!result.success) {
-      setError(result.error ?? "Something went wrong.");
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      setLoading(false);
+      setError("Invalid email or password.");
       return;
     }
+
+    // Fetch the freshly-created session to check the user's role.
+    const session = await getSession();
+    setLoading(false);
+
+    if (session?.user?.role === "Admin") {
+      router.push("/admin");
+      router.refresh();
+      return;
+    }
+
     completeRedirect();
   }
 

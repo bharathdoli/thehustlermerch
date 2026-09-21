@@ -1,86 +1,297 @@
 "use client";
 
-/**
- * Global cart state. Wrap the app with <CartProvider> in app/layout.tsx
- * and call useCart() from any client component (Header for the badge,
- * ProductDetail to add items, /cart to list them).
- *
- * Persists to localStorage so the cart survives a refresh. Swap the
- * localStorage read/write for a real cart API / DB write later — the
- * addToCart/removeFromCart signatures won't need to change.
- */
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import { useSession } from "next-auth/react";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+export type BackendCartItem = {
+  itemId: string;
+  quantity: number;
+  unitPrice: number | string;
+  customizationLogoFront?: string | null;
+  customizationLogoBack?: string | null;
 
-export type CartItem = {
-  cartItemId: string;
-  productId: string;
-  productName: string;
-  image: string; // fallback product image
-  frontImage: string | null; // customer-uploaded front design (data URL)
-  backImage: string | null; // customer-uploaded back design (data URL)
-  colour: string;
-  sizeBreakdown: Record<string, number>; // size -> qty ("One Size" for products without sizes)
-  totalQuantity: number;
-  unitPrice: number;
-  customText: string;
+  variant: {
+    variantId?: string;
+    colour?: string | null;
+    size?: string | null;
+
+    product: {
+      productId?: string;
+      productName: string;
+      productImage?: string | null;
+    };
+  };
+};
+
+export type BackendCart = {
+  cartId: string | null;
+  items: BackendCartItem[];
+  subtotal: number;
 };
 
 type CartContextValue = {
-  items: CartItem[];
-  addToCart: (item: Omit<CartItem, "cartItemId">) => void;
-  removeFromCart: (cartItemId: string) => void;
-  clearCart: () => void;
-  itemCount: number;
+  items: BackendCartItem[];
+  cartId: string | null;
   cartTotal: number;
+  itemCount: number;
+  loading: boolean;
+  error: string | null;
+
+  refreshCart: () => Promise<void>;
+  removeFromCart: (itemId: string) => Promise<void>;
+  clearCart: () => Promise<void>;
 };
 
-const CartContext = createContext<CartContextValue | undefined>(undefined);
-const STORAGE_KEY = "hustler-cart";
+const CartContext = createContext<CartContextValue | undefined>(
+  undefined
+);
 
-export function CartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>([]);
-  const [hydrated, setHydrated] = useState(false);
+export function CartProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const { status } = useSession();
 
-  // Load from localStorage once, on mount (client only)
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) setItems(JSON.parse(raw));
-    } catch {
-      // ignore corrupt storage
+  const [cart, setCart] = useState<BackendCart>({
+    cartId: null,
+    items: [],
+    subtotal: 0,
+  });
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Reset cart completely.
+   * Used when the user is logged out.
+   */
+  function resetCart() {
+    setCart({
+      cartId: null,
+      items: [],
+      subtotal: 0,
+    });
+
+    setError(null);
+  }
+
+  /**
+   * Load the logged-in user's cart.
+   *
+   * IMPORTANT:
+   * Never call /api/cart when the user is not authenticated.
+   */
+  async function refreshCart() {
+    // Session is still being determined.
+    if (status === "loading") {
+      return;
     }
-    setHydrated(true);
-  }, []);
 
-  // Persist on every change, after the initial load has happened
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    } catch {
-      // storage full or unavailable — fail silently, cart still works in-session
+    // User is not logged in.
+    if (status !== "authenticated") {
+      resetCart();
+      setLoading(false);
+      return;
     }
-  }, [items, hydrated]);
 
-  function addToCart(item: Omit<CartItem, "cartItemId">) {
-    const cartItemId = `${item.productId}-${item.colour}-${Date.now()}`;
-    setItems((prev) => [...prev, { ...item, cartItemId }]);
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch("/api/cart", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "include",
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            data?.error ||
+            "Failed to load cart."
+        );
+      }
+
+      setCart({
+        cartId: data?.cartId ?? null,
+
+        items: Array.isArray(data?.items)
+          ? data.items
+          : [],
+
+        subtotal: Number(data?.subtotal ?? 0),
+      });
+    } catch (err) {
+      console.error("Failed to load cart:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load cart."
+      );
+
+      // Don't leave old cart data around after an error.
+      setCart({
+        cartId: null,
+        items: [],
+        subtotal: 0,
+      });
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function removeFromCart(cartItemId: string) {
-    setItems((prev) => prev.filter((i) => i.cartItemId !== cartItemId));
+  /**
+   * Automatically refresh cart whenever authentication
+   * changes.
+   *
+   * Logged in  -> load cart
+   * Logged out -> empty cart
+   */
+  useEffect(() => {
+    if (status === "loading") {
+      return;
+    }
+
+    if (status === "authenticated") {
+      refreshCart();
+    } else {
+      resetCart();
+      setLoading(false);
+    }
+  }, [status]);
+
+  /**
+   * Remove a single cart item.
+   */
+  async function removeFromCart(itemId: string) {
+    // Prevent unauthenticated cart operations.
+    if (status !== "authenticated") {
+      setError("Please log in to modify your cart.");
+      return;
+    }
+
+    try {
+      setError(null);
+
+      const response = await fetch(
+        `/api/cart/items/${itemId}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        }
+      );
+
+      const data = await response
+        .json()
+        .catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            data?.error ||
+            "Failed to remove cart item."
+        );
+      }
+
+      await refreshCart();
+    } catch (err) {
+      console.error(
+        "Failed to remove cart item:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to remove cart item."
+      );
+    }
   }
 
-  function clearCart() {
-    setItems([]);
+  /**
+   * Remove all items from the cart.
+   */
+  async function clearCart() {
+    // Prevent unauthenticated cart operations.
+    if (status !== "authenticated") {
+      setError("Please log in to modify your cart.");
+      return;
+    }
+
+    try {
+      setError(null);
+
+      const currentItems = [...cart.items];
+
+      for (const item of currentItems) {
+        const response = await fetch(
+          `/api/cart/items/${item.itemId}`,
+          {
+            method: "DELETE",
+            credentials: "include",
+          }
+        );
+
+        if (!response.ok) {
+          const data = await response
+            .json()
+            .catch(() => null);
+
+          throw new Error(
+            data?.message ||
+              data?.error ||
+              "Failed to clear cart."
+          );
+        }
+      }
+
+      await refreshCart();
+    } catch (err) {
+      console.error(
+        "Failed to clear cart:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to clear cart."
+      );
+    }
   }
 
-  const itemCount = items.reduce((sum, i) => sum + i.totalQuantity, 0);
-  const cartTotal = items.reduce((sum, i) => sum + i.totalQuantity * i.unitPrice, 0);
+  const itemCount = cart.items.reduce(
+    (sum, item) =>
+      sum + Number(item.quantity),
+    0
+  );
+
+  const cartTotal = Number(cart.subtotal);
 
   return (
-    <CartContext.Provider value={{ items, addToCart, removeFromCart, clearCart, itemCount, cartTotal }}>
+    <CartContext.Provider
+      value={{
+        items: cart.items,
+        cartId: cart.cartId,
+        cartTotal,
+        itemCount,
+        loading,
+        error,
+        refreshCart,
+        removeFromCart,
+        clearCart,
+      }}
+    >
       {children}
     </CartContext.Provider>
   );
@@ -88,6 +299,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
 export function useCart() {
   const ctx = useContext(CartContext);
-  if (!ctx) throw new Error("useCart() must be called inside <CartProvider>");
+
+  if (!ctx) {
+    throw new Error(
+      "useCart() must be called inside <CartProvider>"
+    );
+  }
+
   return ctx;
 }
