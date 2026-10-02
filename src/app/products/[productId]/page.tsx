@@ -1,6 +1,13 @@
 import { notFound } from "next/navigation";
 import ProductDetail from "@/src/components/Productdetail";
 
+/*
+ * NOTE: This is a server component, so it cannot call useToast() (a client
+ * hook) and has no buttons of its own. Toasts for Add to Cart / logo upload /
+ * quantity etc. belong inside src/components/Productdetail.tsx, which is a
+ * client component. Send me that file and I'll wire them in.
+ */
+
 export default async function ProductDetailPage({
   params,
 }: {

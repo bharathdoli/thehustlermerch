@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { useToast } from "@/src/context/ToastContext";
 
 type Coupon = {
   couponId: string;
@@ -15,6 +16,7 @@ type Coupon = {
 };
 
 export default function CouponsPanel() {
+  const toast = useToast();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -41,6 +43,7 @@ export default function CouponsPanel() {
       setCoupons(Array.isArray(data) ? data : data.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load coupons.");
+      toast.error(err instanceof Error ? err.message : "Failed to load coupons.");
     } finally {
       setLoading(false);
     }
@@ -78,8 +81,10 @@ export default function CouponsPanel() {
       setMaxDiscountAmount("");
       setUsageLimit("");
       await fetchCoupons();
+      toast.success("Coupon created.");
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to create coupon.");
+      toast.error(err instanceof Error ? err.message : "Failed to create coupon.");
     } finally {
       setCreating(false);
     }
@@ -96,8 +101,10 @@ export default function CouponsPanel() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? "Failed to update coupon.");
       await fetchCoupons();
+      toast.success(`Coupon ${coupon.code} ${coupon.isActive ? "deactivated" : "activated"}.`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to update coupon.");
+      // alert(err instanceof Error ? err.message : "Failed to update coupon.");
+      toast.error(err instanceof Error ? err.message : "Failed to update coupon.");
     } finally {
       setTogglingId(null);
     }
@@ -113,17 +120,19 @@ export default function CouponsPanel() {
         throw new Error(data.message ?? "Failed to delete coupon.");
       }
       await fetchCoupons();
+      toast.success("Coupon deleted.");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete coupon.");
+      // alert(err instanceof Error ? err.message : "Failed to delete coupon.");
+      toast.error(err instanceof Error ? err.message : "Failed to delete coupon.");
     } finally {
       setDeletingId(null);
     }
   }
 
   return (
-    <div>
+    <div className="w-full min-w-0">
       <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3 border border-black/10 p-4">
-        <div className="min-w-[140px]">
+        <div className="min-w-[140px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Code</label>
           <input
             required
@@ -133,7 +142,7 @@ export default function CouponsPanel() {
             className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
           />
         </div>
-        <div className="min-w-[120px]">
+        <div className="min-w-[120px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Type</label>
           <select
             value={type}
@@ -144,7 +153,7 @@ export default function CouponsPanel() {
             <option value="Percentage">Percentage (%)</option>
           </select>
         </div>
-        <div className="min-w-[100px]">
+        <div className="min-w-[100px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Value</label>
           <input
             required
@@ -156,7 +165,7 @@ export default function CouponsPanel() {
             className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
           />
         </div>
-        <div className="min-w-[120px]">
+        <div className="min-w-[120px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Min order (optional)</label>
           <input
             type="number"
@@ -167,7 +176,7 @@ export default function CouponsPanel() {
           />
         </div>
         {type === "Percentage" && (
-          <div className="min-w-[130px]">
+          <div className="min-w-[130px] max-w-full">
             <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Max discount (optional)</label>
             <input
               type="number"
@@ -178,7 +187,7 @@ export default function CouponsPanel() {
             />
           </div>
         )}
-        <div className="min-w-[130px]">
+        <div className="min-w-[130px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Usage limit (optional)</label>
           <input
             type="number"
@@ -193,7 +202,8 @@ export default function CouponsPanel() {
         <button
           type="submit"
           disabled={creating}
-          className="px-5 py-2 font-mono text-xs font-bold uppercase tracking-widest bg-orange-500 text-black disabled:opacity-50"
+          className="px-5 py-2 font-mono text-xs font-bold uppercase tracking-widest bg-orange-500 text-black disabled:opacity-50
+            w-full min-h-[40px] sm:w-auto"
         >
           {creating ? "Adding..." : "Add Coupon"}
         </button>
@@ -205,7 +215,11 @@ export default function CouponsPanel() {
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         {!loading && !error && (
-          <table className="w-full border-collapse text-sm">
+          <div className="w-full overflow-x-auto">
+          <table
+            className="w-full border-collapse text-sm
+              min-w-[640px]"
+          >
             <thead>
               <tr className="border-b border-black/10 text-left font-mono text-[10px] uppercase tracking-widest opacity-60">
                 <th className="py-2">Code</th>
@@ -231,18 +245,21 @@ export default function CouponsPanel() {
                       {c.isActive ? "Active" : "Inactive"}
                     </span>
                   </td>
-                  <td className="py-2 text-right space-x-3">
+                  <td className="py-2 text-right space-x-3
+                    whitespace-nowrap">
                     <button
                       onClick={() => toggleActive(c)}
                       disabled={togglingId === c.couponId}
-                      className="font-mono text-[10px] uppercase tracking-widest text-orange-600"
+                      className="font-mono text-[10px] uppercase tracking-widest text-orange-600
+                        min-h-[32px]"
                     >
                       {c.isActive ? "Deactivate" : "Activate"}
                     </button>
                     <button
                       onClick={() => handleDelete(c.couponId)}
                       disabled={deletingId === c.couponId}
-                      className="font-mono text-[10px] uppercase tracking-widest text-red-600 disabled:opacity-50"
+                      className="font-mono text-[10px] uppercase tracking-widest text-red-600 disabled:opacity-50
+                        min-h-[32px]"
                     >
                       {deletingId === c.couponId ? "Deleting..." : "Delete"}
                     </button>
@@ -251,6 +268,7 @@ export default function CouponsPanel() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
         {!loading && !error && coupons.length === 0 && <p className="mt-4 text-sm opacity-60">No coupons yet.</p>}

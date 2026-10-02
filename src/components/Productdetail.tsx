@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SIGNAL, hexToRgba, useTheme } from "@/src/context/ThemeContext";
+import { useToast } from "@/src/context/ToastContext";
 
 const QUANTITY_TIERS = [2, 5, 10, 15, 20, 50, 75, 100];
 const PENDING_CART_KEY = "hustler-pending-cart-item";
+/* Max design upload size (added) */
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 type ProductVariant = {
   variantId: string;
   productId: string;
@@ -25,6 +28,23 @@ type Product = {
   rating?: number | string;
   reviewCount?: number;
   variants?: ProductVariant[];
+};
+
+type Review = {
+  rid: string;
+  rating: number;
+  comment?: string | null;
+  createdAt: string;
+  user?: {
+    uname?: string | null;
+  } | null;
+};
+
+type ReviewsPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 };
 
 function fmt(n: number) {
@@ -110,6 +130,303 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Review stars (smaller, used inside review cards)                          */
+/* -------------------------------------------------------------------------- */
+
+function ReviewStars({ rating }: { rating: number }) {
+  const { theme } = useTheme();
+  const emptyStroke = theme === "dark" ? "#5a5648" : "#c9c1af";
+
+  return (
+    <div
+      className="flex items-center gap-0.5"
+      aria-label={`${rating} out of 5 stars`}
+    >
+      {Array.from({ length: 5 }).map((_, i) => {
+        const filled = i + 1 <= Math.round(rating);
+
+        return (
+          <svg
+            key={i}
+            width={13}
+            height={13}
+            viewBox="0 0 24 24"
+            fill={filled ? SIGNAL : "none"}
+            stroke={filled ? SIGNAL : emptyStroke}
+            strokeWidth="1.5"
+          >
+            <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" />
+          </svg>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatReviewDate(value: string) {
+  return new Date(value).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Reviews section — public, no auth required                                */
+/* -------------------------------------------------------------------------- */
+
+function ReviewsSection({ productId }: { productId: string }) {
+  const { colors } = useTheme();
+  const toast = useToast();
+
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [pagination, setPagination] =
+    useState<ReviewsPagination | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadReviews() {
+      try {
+        setLoading(true);
+        setError(null);
+
+        /*
+         * Reviews are public — no credentials/auth sent here.
+         * Anyone visiting the product page, logged in or not,
+         * should be able to see them.
+         */
+        const response = await fetch(
+          `/api/products/${productId}/reviews?page=1&limit=5`,
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message ||
+            data?.error ||
+            "Failed to load reviews."
+          );
+        }
+
+        if (!cancelled) {
+          setReviews(data?.data ?? []);
+          setPagination(data?.pagination ?? null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load reviews:", err);
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to load reviews."
+          );
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : "Failed to load reviews."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadReviews();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [productId]);
+
+  async function loadMore() {
+    if (!pagination || pagination.page >= pagination.totalPages) {
+      return;
+    }
+
+    try {
+      setLoadingMore(true);
+
+      const nextPage = pagination.page + 1;
+
+      const response = await fetch(
+        `/api/products/${productId}/reviews?page=${nextPage}&limit=5`,
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+          data?.error ||
+          "Failed to load more reviews."
+        );
+      }
+
+      setReviews((previous) => [
+        ...previous,
+        ...(data?.data ?? []),
+      ]);
+
+      setPagination(data?.pagination ?? null);
+    } catch (err) {
+      console.error("Failed to load more reviews:", err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to load more reviews."
+      );
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  return (
+    <div
+      className="mt-16 max-w-3xl border-t pt-8"
+      style={{ borderColor: colors.line }}
+    >
+      <div
+        className="flex items-center justify-between"
+        style={{ flexWrap: "wrap", gap: "0.5rem" }}
+      >
+        <h2
+          className="font-display text-2xl uppercase tracking-tight"
+          style={{ color: colors.text }}
+        >
+          Reviews
+        </h2>
+
+        {pagination && pagination.total > 0 && (
+          <span
+            className="font-mono text-[11px]"
+            style={{ color: colors.textMuted }}
+          >
+            {pagination.total} total
+          </span>
+        )}
+      </div>
+
+      {loading ? (
+        <div
+          className="mt-5 border p-6 text-center font-mono text-xs"
+          style={{
+            borderColor: colors.line,
+            color: colors.textMuted,
+          }}
+        >
+          Loading reviews...
+        </div>
+      ) : error ? (
+        <div
+          className="mt-5 border p-4 font-mono text-xs"
+          style={{
+            borderColor: SIGNAL,
+            color: SIGNAL,
+          }}
+        >
+          {error}
+        </div>
+      ) : reviews.length === 0 ? (
+        <div
+          className="mt-5 border p-6 text-center"
+          style={{ borderColor: colors.line }}
+        >
+          <p
+            className="text-sm"
+            style={{ color: colors.textMuted }}
+          >
+            No reviews yet. Be the first to review this product.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="mt-5 space-y-4">
+            {reviews.map((review) => (
+              <div
+                key={review.rid}
+                className="border p-4"
+                style={{
+                  borderColor: colors.line,
+                  backgroundColor: colors.panel,
+                }}
+              >
+                <div
+                  className="flex items-center justify-between gap-3"
+                  style={{ flexWrap: "wrap" }}
+                >
+                  <div
+                    className="flex items-center gap-3"
+                    style={{ flexWrap: "wrap", minWidth: 0 }}
+                  >
+                    <ReviewStars rating={review.rating} />
+
+                    <span
+                      className="text-sm font-semibold"
+                      style={{ color: colors.text }}
+                    >
+                      {review.user?.uname ?? "Anonymous"}
+                    </span>
+                  </div>
+
+                  <span
+                    className="font-mono text-[10px]"
+                    style={{ color: colors.textMuted }}
+                  >
+                    {formatReviewDate(review.createdAt)}
+                  </span>
+                </div>
+
+                {review.comment && (
+                  <p
+                    className="mt-2 text-sm leading-relaxed"
+                    style={{ color: colors.textMuted }}
+                  >
+                    {review.comment}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {pagination &&
+            pagination.page < pagination.totalPages && (
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="mt-5 w-full border py-3 font-mono text-xs font-bold uppercase tracking-widest transition hover:opacity-80 disabled:opacity-50"
+                style={{
+                  borderColor: SIGNAL,
+                  color: SIGNAL,
+                }}
+              >
+                {loadingMore
+                  ? "Loading..."
+                  : "Load More Reviews"}
+              </button>
+            )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Upload slot                                                                */
 /* -------------------------------------------------------------------------- */
 
@@ -123,15 +440,42 @@ function UploadSlot({
   onChange: (dataUrl: string | null) => void;
 }) {
   const { colors } = useTheme();
+  const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleFile(file: File | undefined) {
     if (!file) return;
 
+    /* Validate before reading (added) */
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file (PNG, JPG, WEBP…).");
+
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
+
+      return;
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast.error("That image is too large. Please keep it under 5 MB.");
+
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
+
+      return;
+    }
+
     const reader = new FileReader();
 
     reader.onload = () => {
       onChange(reader.result as string);
+      toast.success(`${label} uploaded.`);
+    };
+
+    reader.onerror = () => {
+      toast.error(`Couldn't read the ${label.toLowerCase()} file. Please try again.`);
     };
 
     reader.readAsDataURL(file);
@@ -171,6 +515,7 @@ function UploadSlot({
           <button
             type="button"
             aria-label={`Remove ${label}`}
+            onClickCapture={() => toast.info(`${label} removed.`)}
             onClick={() => onChange(null)}
             className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full transition hover:opacity-80"
             style={{
@@ -224,6 +569,7 @@ export default function ProductDetail({
 }) {
   const router = useRouter();
   const { colors } = useTheme();
+  const toast = useToast();
 
   const variants = product.variants ?? [];
 
@@ -356,6 +702,10 @@ export default function ProductDetail({
     // Reset size allocation because the available variants changed.
     setSizeQuantities({});
 
+    if (selectedSizeTotal > 0 && newColour !== selectedColour) {
+      toast.info(`Colour changed to ${newColour}. Please pick your sizes again.`);
+    }
+
     setCartError(null);
     setJustAdded(false);
   }
@@ -368,6 +718,39 @@ export default function ProductDetail({
     size: string,
     delta: number
   ) {
+    /*
+     * Pre-checks (added) so that toasts are fired outside the
+     * state updater (updaters must stay free of side effects).
+     */
+    if (delta > 0) {
+      const currentQty = sizeQuantities[size] ?? 0;
+      const nextQty = Math.max(0, currentQty + delta);
+      const othersTotal = selectedSizeTotal - currentQty;
+
+      if (othersTotal + nextQty > quantityTier) {
+        toast.info(
+          `You've already selected all ${quantityTier} pieces. Remove one to change sizes.`
+        );
+        return;
+      }
+
+      const checkVariant = findVariant(selectedColour, size);
+
+      if (
+        checkVariant?.stockQuantity !== undefined &&
+        nextQty > checkVariant.stockQuantity
+      ) {
+        toast.error(
+          `Only ${checkVariant.stockQuantity} in stock for size ${size}.`
+        );
+        return;
+      }
+
+      if (othersTotal + nextQty === quantityTier) {
+        toast.success("Size allocation complete.");
+      }
+    }
+
     setSizeQuantities((previous) => {
       const current = previous[size] ?? 0;
       const next = Math.max(0, current + delta);
@@ -416,6 +799,14 @@ export default function ProductDetail({
 
     // Start fresh when changing total quantity.
     setSizeQuantities({});
+
+    if (tier !== quantityTier) {
+      toast.info(
+        selectedSizeTotal > 0
+          ? `Quantity set to ${tier} pcs. Your size selection was reset.`
+          : `Quantity set to ${tier} pcs.`
+      );
+    }
 
     setCartError(null);
     setJustAdded(false);
@@ -514,6 +905,21 @@ export default function ProductDetail({
   /* ------------------------------------------------------------------------ */
 
   async function handleAddToCart() {
+    /* Explain why the order can't be added yet (added) */
+    if (!canAdd && !addingToCart) {
+      if (!hasVariants) {
+        toast.error("No variants are available for this product.");
+      } else if (!selectedColour) {
+        toast.error("Please select a colour.");
+      } else if (!hasValidAllocation) {
+        toast.error(`Select exactly ${quantityTier} pieces across the available sizes.`);
+      } else if (!hasEnoughStock) {
+        toast.error("Selected quantity exceeds available stock.");
+      } else if (!imagesUploaded) {
+        toast.error("Upload both a front and back design.");
+      }
+    }
+
     if (!canAdd || addingToCart) {
       return;
     }
@@ -557,6 +963,7 @@ export default function ProductDetail({
          * Not logged in.
          */
         if (response.status === 401) {
+          toast.info("Please log in to add items to your cart.");
 
           sessionStorage.setItem(
             PENDING_CART_KEY,
@@ -595,6 +1002,9 @@ export default function ProductDetail({
       }
 
       setJustAdded(true);
+      toast.success(
+        `${selectedSizeTotal} piece${selectedSizeTotal > 1 ? "s" : ""} added to your cart.`
+      );
 
       /*
        * Give CartContext a chance to refresh when the cart
@@ -632,6 +1042,12 @@ export default function ProductDetail({
           ? error.message
           : "Failed to add product to cart."
       );
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to add product to cart."
+      );
     } finally {
       setAddingToCart(false);
     }
@@ -642,7 +1058,17 @@ export default function ProductDetail({
   /* ------------------------------------------------------------------------ */
 
   return (
-    <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-12">
+    <div
+      className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-12"
+      data-pd=""
+    >
+      {/* Responsive safety net (added) */}
+      <style>{`
+        [data-pd] { overflow-x: clip; }
+        [data-pd] h1, [data-pd] h2, [data-pd] p { overflow-wrap: anywhere; }
+        [data-pd] img { max-width: 100%; }
+      `}</style>
+
       {/* Breadcrumb */}
 
       <div
@@ -650,6 +1076,7 @@ export default function ProductDetail({
         style={{
           color: colors.textMuted,
           opacity: 0.7,
+          flexWrap: "wrap",
         }}
       >
         <Link
@@ -696,7 +1123,10 @@ export default function ProductDetail({
           </div>
 
           {images.length > 1 && (
-            <div className="mt-3 flex gap-2">
+            <div
+              className="mt-3 flex gap-2"
+              style={{ overflowX: "auto" }}
+            >
               {images.map((image, index) => (
                 <button
                   key={`${image}-${index}`}
@@ -772,7 +1202,10 @@ export default function ProductDetail({
 
           {/* Rating */}
 
-          <div className="mt-4 flex items-center gap-3">
+          <div
+            className="mt-4 flex items-center gap-3"
+            style={{ flexWrap: "wrap" }}
+          >
             <StarRating
               rating={Number(product.rating ?? 0)}
             />
@@ -881,7 +1314,10 @@ export default function ProductDetail({
 
           {availableSizes.length > 0 && (
             <div className="mt-6">
-              <div className="flex items-center justify-between">
+              <div
+                className="flex items-center justify-between"
+                style={{ flexWrap: "wrap", gap: "0.25rem" }}
+              >
                 <p
                   className="font-mono text-[11px] uppercase tracking-widest"
                   style={{ color: colors.textMuted }}
@@ -931,6 +1367,8 @@ export default function ProductDetail({
                       className="flex items-center justify-between border-b px-4 py-3 last:border-b-0"
                       style={{
                         borderColor: colors.line,
+                        flexWrap: "wrap",
+                        gap: "0.5rem",
                       }}
                     >
                       <div>
@@ -1126,7 +1564,10 @@ export default function ProductDetail({
                 backgroundColor: colors.panel,
               }}
             >
-              <div className="flex items-center justify-between">
+              <div
+                className="flex items-center justify-between"
+                style={{ flexWrap: "wrap", gap: "0.25rem" }}
+              >
                 <span
                   className="font-mono text-[11px] uppercase tracking-widest"
                   style={{ color: colors.textMuted }}
@@ -1149,6 +1590,7 @@ export default function ProductDetail({
                     <div
                       key={variant.variantId}
                       className="flex items-center justify-between font-mono text-xs"
+                      style={{ flexWrap: "wrap", gap: "0.25rem" }}
                     >
                       <span
                         style={{
@@ -1307,6 +1749,12 @@ export default function ProductDetail({
           </p>
         </div>
       )}
+
+      {/* ==================================================================== */}
+      {/* Reviews — public, visible to every visitor                          */}
+      {/* ==================================================================== */}
+
+      <ReviewsSection productId={product.ProductId} />
     </div>
   );
 }

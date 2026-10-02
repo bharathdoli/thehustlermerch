@@ -93,8 +93,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.dataset.theme = theme;
   }, [theme, mounted]);
 
+  
   const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
   const colors = colorsFor(theme);
+
+  useEffect(() => {
+  document.documentElement.style.backgroundColor = colors.bg;
+  document.body.style.backgroundColor = colors.bg;
+}, [colors.bg]);
+
 
   return (
     <ThemeContext.Provider value={{ theme, colors, toggleTheme }}>

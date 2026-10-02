@@ -3,9 +3,9 @@
 import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
-import { getSession } from "next-auth/react";
+import { useToast } from "@/src/context/ToastContext";
 
 const PENDING_CART_KEY = "hustler-pending-cart-item";
 
@@ -14,6 +14,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/";
   const { colors } = useTheme();
+  const toast = useToast();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,9 +32,7 @@ function LoginForm() {
           const response = await fetch("/api/cart", {
             method: "POST",
             credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               variantId: item.variantId,
               quantity: item.quantity,
@@ -46,13 +45,17 @@ function LoginForm() {
         }
 
         sessionStorage.removeItem(PENDING_CART_KEY);
+        toast.success("Your saved items were added to the cart.");
 
         router.push("/cart");
         router.refresh();
         return;
       }
-    } catch (error) {
-      console.error("Failed to restore pending cart:", error);
+    } catch (err) {
+      console.error("Failed to restore pending cart:", err);
+      toast.error(
+        "We couldn't restore the item you were adding. Please add it again."
+      );
     }
 
     router.push(redirectTo);
@@ -62,82 +65,156 @@ function LoginForm() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+
+    if (!email.trim() || !password) {
+      const message = "Enter your email and password.";
+      setError(message);
+      toast.error(message);
+      return;
+    }
+
     setLoading(true);
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const result = await signIn("credentials", {
+        email: email.trim(),
+        password,
+        redirect: false,
+      });
 
-    if (result?.error) {
+      if (result?.error) {
+        const message = "Invalid email or password.";
+        setError(message);
+        toast.error(message);
+        return;
+      }
+
+      // Fetch the freshly-created session to check the user's role.
+      const session = await getSession();
+      toast.success("Logged in successfully.");
+
+      if (session?.user?.role === "Admin") {
+        toast.info("Redirecting to admin dashboard...");
+        router.push("/admin");
+        router.refresh();
+        return;
+      }
+
+      await completeRedirect();
+    } catch (err) {
+      console.error("Login failed:", err);
+      const message = "Something went wrong. Please try again.";
+      setError(message);
+      toast.error(message);
+    } finally {
       setLoading(false);
-      setError("Invalid email or password.");
-      return;
     }
-
-    // Fetch the freshly-created session to check the user's role.
-    const session = await getSession();
-    setLoading(false);
-
-    if (session?.user?.role === "Admin") {
-      router.push("/admin");
-      router.refresh();
-      return;
-    }
-
-    completeRedirect();
   }
 
+  const inputClass =
+    "mt-2 w-full border px-4 py-3 text-base focus:outline-none sm:text-sm";
+
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-5 py-16 sm:px-8">
-      <span className="font-mono text-[11px] tracking-[0.25em]" style={{ color: SIGNAL }}>Welcome back</span>
-      <h1 className="mt-2 font-display text-4xl uppercase tracking-tight" style={{ color: colors.text }}>Log In</h1>
-
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-        <div>
-          <label className="font-mono text-[11px] uppercase tracking-widest" style={{ color: colors.textMuted }}>Email</label>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@email.com"
-            className="mt-2 w-full border px-4 py-3 text-sm focus:outline-none"
-            style={{ borderColor: colors.lineStrong, backgroundColor: colors.panel, color: colors.text }}
-          />
-        </div>
-        <div>
-          <label className="font-mono text-[11px] uppercase tracking-widest" style={{ color: colors.textMuted }}>Password</label>
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            className="mt-2 w-full border px-4 py-3 text-sm focus:outline-none"
-            style={{ borderColor: colors.lineStrong, backgroundColor: colors.panel, color: colors.text }}
-          />
-        </div>
-
-        {error && <p className="font-mono text-[11px]" style={{ color: SIGNAL }}>{error}</p>}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-3 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95 disabled:opacity-50"
-          style={{ backgroundColor: SIGNAL, color: "#131210" }}
+    <div
+      className="flex min-h-[60dvh] w-full flex-col justify-center"
+      style={{ backgroundColor: colors.bg }}
+    >
+      <div className="mx-auto flex w-full max-w-md flex-col overflow-x-hidden px-4 py-10 sm:px-8 sm:py-16">
+        <span
+          className="font-mono text-[11px] tracking-[0.25em]"
+          style={{ color: SIGNAL }}
         >
-          {loading ? "Logging in..." : "Log In"}
-        </button>
-      </form>
+          Welcome back
+        </span>
 
-      <p className="mt-6 text-center font-mono text-[11px]" style={{ color: colors.textMuted }}>
-        Don&apos;t have an account?{" "}
-        <Link href={`/signup?redirect=${encodeURIComponent(redirectTo)}`} style={{ color: SIGNAL }} className="hover:underline">
-          Sign up
-        </Link>
-      </p>
+        <h1
+          className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-4xl"
+          style={{ color: colors.text }}
+        >
+          Log In
+        </h1>
+
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
+          <div>
+            <label
+              htmlFor="login-email"
+              className="font-mono text-[11px] uppercase tracking-widest"
+              style={{ color: colors.textMuted }}
+            >
+              Email
+            </label>
+            <input
+              id="login-email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@email.com"
+              autoComplete="email"
+              className={inputClass}
+              style={{
+                borderColor: colors.lineStrong,
+                backgroundColor: colors.panel,
+                color: colors.text,
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="login-password"
+              className="font-mono text-[11px] uppercase tracking-widest"
+              style={{ color: colors.textMuted }}
+            >
+              Password
+            </label>
+            <input
+              id="login-password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              autoComplete="current-password"
+              className={inputClass}
+              style={{
+                borderColor: colors.lineStrong,
+                backgroundColor: colors.panel,
+                color: colors.text,
+              }}
+            />
+          </div>
+
+          {error && (
+            <p className="font-mono text-[11px]" style={{ color: SIGNAL }}>
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3.5 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: SIGNAL, color: "#131210" }}
+          >
+            {loading ? "Logging in..." : "Log In"}
+          </button>
+        </form>
+
+        <p
+          className="mt-6 text-center font-mono text-[11px]"
+          style={{ color: colors.textMuted }}
+        >
+          Don&apos;t have an account?{" "}
+          <Link
+            href={`/signup?redirect=${encodeURIComponent(redirectTo)}`}
+            style={{ color: SIGNAL }}
+            className="hover:underline"
+          >
+            Sign up
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

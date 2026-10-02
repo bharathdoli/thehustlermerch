@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { useToast } from "@/src/context/ToastContext";
 
 type Category = { categoryId: string; categoryName: string };
 type Product = {
@@ -14,6 +15,7 @@ type Product = {
 };
 
 export default function ProductsPanel() {
+  const toast = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +53,7 @@ export default function ProductsPanel() {
       setCategories(Array.isArray(catData) ? catData : catData.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data.");
+      toast.error(err instanceof Error ? err.message : "Failed to load data.");
     } finally {
       setLoading(false);
     }
@@ -69,6 +72,7 @@ export default function ProductsPanel() {
     setCreateError("");
     if (!categoryId) {
       setCreateError("Select a category.");
+      toast.error("Select a category.");
       return;
     }
     setCreating(true);
@@ -97,8 +101,10 @@ export default function ProductsPanel() {
       setReviewCount("");
       setCategoryId("");
       await fetchAll();
+      toast.success("Product added.");
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to create product.");
+      toast.error(err instanceof Error ? err.message : "Failed to create product.");
     } finally {
       setCreating(false);
     }
@@ -131,8 +137,10 @@ export default function ProductsPanel() {
       if (!res.ok) throw new Error(data.message ?? "Failed to update product.");
       setEditingId(null);
       await fetchAll();
+      toast.success("Product updated.");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to update product.");
+      // alert(err instanceof Error ? err.message : "Failed to update product.");
+      toast.error(err instanceof Error ? err.message : "Failed to update product.");
     } finally {
       setSavingEdit(false);
     }
@@ -148,17 +156,19 @@ export default function ProductsPanel() {
         throw new Error(data.message ?? "Failed to delete product.");
       }
       await fetchAll();
+      toast.success("Product deleted.");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete product.");
+      // alert(err instanceof Error ? err.message : "Failed to delete product.");
+      toast.error(err instanceof Error ? err.message : "Failed to delete product.");
     } finally {
       setDeletingId(null);
     }
   }
 
   return (
-    <div>
+    <div className="w-full min-w-0">
       <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3 border border-black/10 p-4">
-        <div className="min-w-[160px]">
+        <div className="min-w-[160px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Category</label>
           <select
             required
@@ -174,7 +184,7 @@ export default function ProductsPanel() {
             ))}
           </select>
         </div>
-        <div className="flex-1 min-w-[180px]">
+        <div className="flex-1 min-w-[180px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Product name</label>
           <input
             required
@@ -184,7 +194,7 @@ export default function ProductsPanel() {
             className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
           />
         </div>
-        <div className="flex-1 min-w-[220px]">
+        <div className="flex-1 min-w-[220px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Description (optional)</label>
           <input
             value={description}
@@ -193,7 +203,7 @@ export default function ProductsPanel() {
             className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
           />
         </div>
-        <div className="flex-1 min-w-[220px]">
+        <div className="flex-1 min-w-[220px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Image URL (optional)</label>
           <input
             value={productImage}
@@ -202,7 +212,7 @@ export default function ProductsPanel() {
             className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
           />
         </div>
-        <div className="min-w-[100px]">
+        <div className="min-w-[100px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Rating (optional)</label>
           <input
             type="number"
@@ -215,7 +225,7 @@ export default function ProductsPanel() {
             className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
           />
         </div>
-        <div className="min-w-[120px]">
+        <div className="min-w-[120px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Review count</label>
           <input
             type="number"
@@ -230,7 +240,8 @@ export default function ProductsPanel() {
         <button
           type="submit"
           disabled={creating}
-          className="px-5 py-2 font-mono text-xs font-bold uppercase tracking-widest bg-orange-500 text-black disabled:opacity-50"
+          className="px-5 py-2 font-mono text-xs font-bold uppercase tracking-widest bg-orange-500 text-black disabled:opacity-50
+            w-full min-h-[40px] sm:w-auto"
         >
           {creating ? "Adding..." : "Add Product"}
         </button>
@@ -242,7 +253,11 @@ export default function ProductsPanel() {
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         {!loading && !error && (
-          <table className="w-full border-collapse text-sm">
+          <div className="w-full overflow-x-auto">
+          <table
+            className="w-full border-collapse text-sm
+              min-w-[900px]"
+          >
             <thead>
               <tr className="border-b border-black/10 text-left font-mono text-[10px] uppercase tracking-widest opacity-60">
                 <th className="py-2">Name</th>
@@ -303,15 +318,18 @@ export default function ProductsPanel() {
                           className="w-16 border border-black/20 px-2 py-1 text-sm focus:outline-none"
                         />
                       </td>
-                      <td className="py-2 text-right space-x-2">
+                      <td className="py-2 text-right space-x-2
+                        whitespace-nowrap">
                         <button
                           onClick={() => saveEdit(p.productId)}
                           disabled={savingEdit}
-                          className="font-mono text-[10px] uppercase tracking-widest text-orange-600"
+                          className="font-mono text-[10px] uppercase tracking-widest text-orange-600
+                            min-h-[32px]"
                         >
                           Save
                         </button>
-                        <button onClick={() => setEditingId(null)} className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+                        <button onClick={() => { setEditingId(null); toast.info("Edit cancelled."); }} className="font-mono text-[10px] uppercase tracking-widest opacity-60
+                          min-h-[32px]">
                           Cancel
                         </button>
                       </td>
@@ -330,14 +348,17 @@ export default function ProductsPanel() {
                       </td>
                       <td className="py-2 pr-3 opacity-70">{p.rating ?? "—"}</td>
                       <td className="py-2 pr-3 opacity-70">{p.reviewCount ?? "—"}</td>
-                      <td className="py-2 text-right space-x-3">
-                        <button onClick={() => startEdit(p)} className="font-mono text-[10px] uppercase tracking-widest text-orange-600">
+                      <td className="py-2 text-right space-x-3
+                        whitespace-nowrap">
+                        <button onClick={() => startEdit(p)} className="font-mono text-[10px] uppercase tracking-widest text-orange-600
+                          min-h-[32px]">
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(p.productId)}
                           disabled={deletingId === p.productId}
-                          className="font-mono text-[10px] uppercase tracking-widest text-red-600 disabled:opacity-50"
+                          className="font-mono text-[10px] uppercase tracking-widest text-red-600 disabled:opacity-50
+                            min-h-[32px]"
                         >
                           {deletingId === p.productId ? "Deleting..." : "Delete"}
                         </button>
@@ -348,6 +369,7 @@ export default function ProductsPanel() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
         {!loading && !error && products.length === 0 && <p className="mt-4 text-sm opacity-60">No products yet.</p>}

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
 import { useCart } from "@/src/context/CartContext";
+import { useToast } from "@/src/context/ToastContext";
 
 type Address = {
   addressId: string;
@@ -74,6 +75,7 @@ function getMinOrder(coupon: Coupon) {
 
 export default function CheckoutPage() {
   const { colors } = useTheme();
+  const toast = useToast();
 
   const {
     items,
@@ -152,8 +154,8 @@ export default function CheckoutPage() {
       if (!response.ok) {
         throw new Error(
           data?.message ||
-            data?.error ||
-            "Failed to load addresses."
+          data?.error ||
+          "Failed to load addresses."
         );
       }
 
@@ -191,6 +193,10 @@ export default function CheckoutPage() {
         error instanceof Error
           ? error.message
           : "Failed to load addresses."
+      );
+
+      toast.error(
+        error instanceof Error ? error.message : "Failed to load addresses."
       );
     } finally {
       setAddressLoading(false);
@@ -243,6 +249,21 @@ export default function CheckoutPage() {
         "Please fill all required address fields."
       );
 
+      toast.error("Please fill all required address fields.");
+
+      return;
+    }
+
+    // Extra validation
+    if (!/^\d{10}$/.test(newAddress.recipientPhone.trim())) {
+      setAddressError("Enter a valid 10-digit phone number.");
+      toast.error("Enter a valid 10-digit phone number.");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(newAddress.pincode.trim())) {
+      setAddressError("Enter a valid 6-digit pincode.");
+      toast.error("Enter a valid 6-digit pincode.");
       return;
     }
 
@@ -269,8 +290,8 @@ export default function CheckoutPage() {
       if (!response.ok) {
         throw new Error(
           data?.message ||
-            data?.error ||
-            "Failed to add address."
+          data?.error ||
+          "Failed to add address."
         );
       }
 
@@ -289,6 +310,8 @@ export default function CheckoutPage() {
 
       setNewAddress(EMPTY_ADDRESS);
       setShowAddressForm(false);
+
+      toast.success("Address added and selected.");
     } catch (error) {
       console.error(
         "Failed to add address:",
@@ -299,6 +322,10 @@ export default function CheckoutPage() {
         error instanceof Error
           ? error.message
           : "Failed to add address."
+      );
+
+      toast.error(
+        error instanceof Error ? error.message : "Failed to add address."
       );
     } finally {
       setSavingAddress(false);
@@ -323,6 +350,7 @@ export default function CheckoutPage() {
 
     if (!code) {
       setCouponError("Please enter a coupon code.");
+      toast.error("Please enter a coupon code.");
       return;
     }
 
@@ -356,6 +384,7 @@ export default function CheckoutPage() {
       setDiscount(Math.min(Math.max(discountAmount, 0), cartTotal));
       setCouponError(null);
       setShowCoupons(false);
+      toast.success(`Coupon ${validation.coupon.code} applied.`);
     } catch (error) {
       console.error("Failed to apply coupon:", error);
       setSelectedCoupon(null);
@@ -363,6 +392,7 @@ export default function CheckoutPage() {
       setCouponError(
         error instanceof Error ? error.message : "Invalid coupon."
       );
+      toast.error(error instanceof Error ? error.message : "Invalid coupon.");
     } finally {
       setApplyingCouponId(null);
     }
@@ -379,6 +409,7 @@ export default function CheckoutPage() {
     setDiscount(0);
     setCouponCode("");
     setCouponError(null);
+    toast.info("Coupon removed.");
   }
 
   /*
@@ -390,11 +421,16 @@ export default function CheckoutPage() {
    * ================================================================
    */
 
-  function handlePayment() {
+  const [placingOrder, setPlacingOrder] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
+
+  async function handlePayment() {
     if (!selectedAddressId) {
       setAddressError(
         "Please select a delivery address before payment."
       );
+
+      toast.error("Please select a delivery address before payment.");
 
       window.scrollTo({
         top: 0,
@@ -404,9 +440,48 @@ export default function CheckoutPage() {
       return;
     }
 
-    alert(
-      "Payment flow will be connected here later."
-    );
+    try {
+      setPlacingOrder(true);
+      setOrderError(null);
+
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          addressId: selectedAddressId,
+          ...(selectedCoupon ? { couponCode: selectedCoupon.code } : {}),
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message || data?.error || "Failed to place order."
+        );
+      }
+
+      // data.orderId is what you need to test reviews against —
+      // reviews require a real orderId per your Reviews model.
+      toast.success("Order placed successfully!");
+      alert(`Order placed! Order ID: ${data.orderId}`);
+
+      // Simplest redirect for now, since this is a test wire-up:
+      window.location.href = `/orders/${data.orderId}`;
+    } catch (error) {
+      console.error("Failed to place order:", error);
+      setOrderError(
+        error instanceof Error ? error.message : "Failed to place order."
+      );
+      toast.error(error instanceof Error ? error.message : "Failed to place order.");
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setPlacingOrder(false);
+    }
   }
 
   /*
@@ -477,7 +552,7 @@ export default function CheckoutPage() {
    */
 
   return (
-    <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-14">
+    <div className="mx-auto max-w-7xl overflow-x-hidden px-5 py-10 sm:px-8 sm:py-14">
       {/* ========================================================== */}
       {/* HEADER                                                      */}
       {/* ========================================================== */}
@@ -517,7 +592,7 @@ export default function CheckoutPage() {
 
       {addressError && (
         <div
-          className="mt-6 border p-4 font-mono text-xs"
+          className="mt-6 break-words border p-4 font-mono text-xs"
           style={{
             borderColor: SIGNAL,
             color: SIGNAL,
@@ -527,12 +602,21 @@ export default function CheckoutPage() {
         </div>
       )}
 
-      <div className="mt-10 grid gap-10 lg:grid-cols-12">
+      {orderError && (
+        <div
+          className="mt-6 break-words border p-4 font-mono text-xs"
+          style={{ borderColor: SIGNAL, color: SIGNAL }}
+        >
+          {orderError}
+        </div>
+      )}
+
+      <div className="mt-10 grid grid-cols-1 gap-6 sm:gap-10 lg:grid-cols-12">
         {/* ======================================================== */}
         {/* LEFT SIDE                                                 */}
         {/* ======================================================== */}
 
-        <div className="space-y-8 lg:col-span-8">
+        <div className="min-w-0 space-y-8 lg:col-span-8">
           {/* ====================================================== */}
           {/* CART ITEMS                                               */}
           {/* ====================================================== */}
@@ -614,7 +698,7 @@ export default function CheckoutPage() {
                 return (
                   <div
                     key={item.itemId}
-                    className="flex gap-4 p-4 sm:p-5"
+                    className="flex gap-4 p-4 max-[380px]:flex-col sm:p-5"
                     style={{
                       borderTop:
                         index === 0
@@ -656,7 +740,7 @@ export default function CheckoutPage() {
 
                     <div className="min-w-0 flex-1">
                       <h3
-                        className="text-sm font-semibold"
+                        className="break-words text-sm font-semibold"
                         style={{
                           color:
                             colors.text,
@@ -719,7 +803,7 @@ export default function CheckoutPage() {
           {/* ====================================================== */}
 
           <section>
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h2
                   className="font-display text-2xl uppercase"
@@ -824,11 +908,14 @@ export default function CheckoutPage() {
                         key={
                           address.addressId
                         }
-                        onClick={() =>
+                        onClick={() => {
                           setSelectedAddressId(
                             address.addressId
-                          )
-                        }
+                          );
+                          if (!selected) {
+                            toast.info("Delivery address selected.");
+                          }
+                        }}
                         className="w-full border p-4 text-left transition"
                         style={{
                           borderColor:
@@ -842,7 +929,7 @@ export default function CheckoutPage() {
                         }}
                       >
                         <div className="flex items-start justify-between gap-4">
-                          <div>
+                          <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <span
                                 className="text-sm font-semibold"
@@ -872,7 +959,7 @@ export default function CheckoutPage() {
                             </div>
 
                             <p
-                              className="mt-2 text-sm leading-relaxed"
+                              className="mt-2 break-words text-sm leading-relaxed"
                               style={{
                                 color:
                                   colors.textMuted,
@@ -949,7 +1036,7 @@ export default function CheckoutPage() {
 
             {showAddressForm && (
               <div
-                className="mt-5 border p-5"
+                className="mt-5 border p-4 sm:p-5"
                 style={{
                   borderColor:
                     colors.line,
@@ -966,7 +1053,7 @@ export default function CheckoutPage() {
                   New Address
                 </h3>
 
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <input
                     value={
                       newAddress.recipientName
@@ -978,7 +1065,7 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="Recipient Name *"
-                    className="border px-3 py-3 text-sm outline-none"
+                    className="w-full border px-3 py-3 text-base outline-none sm:text-sm"
                     style={{
                       borderColor:
                         colors.lineStrong,
@@ -1001,7 +1088,7 @@ export default function CheckoutPage() {
                     placeholder="Phone Number *"
                     inputMode="numeric"
                     maxLength={10}
-                    className="border px-3 py-3 text-sm outline-none"
+                    className="w-full border px-3 py-3 text-base outline-none sm:text-sm"
                     style={{
                       borderColor:
                         colors.lineStrong,
@@ -1022,7 +1109,7 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="Address Line 1 *"
-                    className="border px-3 py-3 text-sm outline-none sm:col-span-2"
+                    className="w-full border px-3 py-3 text-base outline-none sm:col-span-2 sm:text-sm"
                     style={{
                       borderColor:
                         colors.lineStrong,
@@ -1043,7 +1130,7 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="Address Line 2"
-                    className="border px-3 py-3 text-sm outline-none"
+                    className="w-full border px-3 py-3 text-base outline-none sm:text-sm"
                     style={{
                       borderColor:
                         colors.lineStrong,
@@ -1064,7 +1151,7 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="Landmark"
-                    className="border px-3 py-3 text-sm outline-none"
+                    className="w-full border px-3 py-3 text-base outline-none sm:text-sm"
                     style={{
                       borderColor:
                         colors.lineStrong,
@@ -1083,7 +1170,7 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="City *"
-                    className="border px-3 py-3 text-sm outline-none"
+                    className="w-full border px-3 py-3 text-base outline-none sm:text-sm"
                     style={{
                       borderColor:
                         colors.lineStrong,
@@ -1104,7 +1191,7 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="State *"
-                    className="border px-3 py-3 text-sm outline-none"
+                    className="w-full border px-3 py-3 text-base outline-none sm:text-sm"
                     style={{
                       borderColor:
                         colors.lineStrong,
@@ -1127,7 +1214,7 @@ export default function CheckoutPage() {
                     placeholder="Pincode *"
                     inputMode="numeric"
                     maxLength={6}
-                    className="border px-3 py-3 text-sm outline-none"
+                    className="w-full border px-3 py-3 text-base outline-none sm:text-sm"
                     style={{
                       borderColor:
                         colors.lineStrong,
@@ -1148,7 +1235,7 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="Country"
-                    className="border px-3 py-3 text-sm outline-none"
+                    className="w-full border px-3 py-3 text-base outline-none sm:text-sm"
                     style={{
                       borderColor:
                         colors.lineStrong,
@@ -1192,7 +1279,7 @@ export default function CheckoutPage() {
                   disabled={
                     savingAddress
                   }
-                  className="mt-5 px-6 py-3 font-mono text-xs font-bold uppercase tracking-widest transition disabled:opacity-50"
+                  className="mt-5 w-full px-6 py-3 font-mono text-xs font-bold uppercase tracking-widest transition disabled:opacity-50 sm:w-auto"
                   style={{
                     backgroundColor: SIGNAL,
                     color: "#131210",
@@ -1211,9 +1298,9 @@ export default function CheckoutPage() {
         {/* RIGHT SIDE                                                */}
         {/* ======================================================== */}
 
-        <aside className="lg:col-span-4">
+        <aside className="min-w-0 lg:col-span-4">
           <div
-            className="sticky top-6 border p-5"
+            className="sticky top-6 border p-4 max-lg:static sm:p-5 lg:top-6"
             style={{
               borderColor: colors.line,
               backgroundColor:
@@ -1301,7 +1388,7 @@ export default function CheckoutPage() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span
-                      className="font-mono text-xs font-bold uppercase"
+                      className="break-all font-mono text-xs font-bold uppercase"
                       style={{
                         color: SIGNAL,
                       }}
@@ -1323,7 +1410,7 @@ export default function CheckoutPage() {
 
                   {selectedCoupon.description && (
                     <p
-                      className="mt-1 text-xs"
+                      className="mt-1 break-words text-xs"
                       style={{
                         color:
                           colors.textMuted,
@@ -1376,7 +1463,7 @@ export default function CheckoutPage() {
                         Have a coupon code?
                       </p>
 
-                      <div className="mt-3 flex gap-2">
+                      <div className="mt-3 flex flex-wrap gap-2 sm:flex-nowrap">
                         <input
                           type="text"
                           value={couponCode}
@@ -1388,7 +1475,7 @@ export default function CheckoutPage() {
                             if (e.key === "Enter") handleApplyCoupon();
                           }}
                           placeholder="ENTER COUPON CODE"
-                          className="min-w-0 flex-1 border px-3 py-3 font-mono text-xs uppercase outline-none"
+                          className="min-w-0 flex-1 border px-3 py-3 font-mono text-base uppercase outline-none sm:text-xs"
                           style={{
                             borderColor: colors.lineStrong,
                             backgroundColor: colors.panel,
@@ -1400,7 +1487,7 @@ export default function CheckoutPage() {
                           type="button"
                           onClick={handleApplyCoupon}
                           disabled={applyingCouponId === "input"}
-                          className="shrink-0 px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-widest transition disabled:cursor-not-allowed disabled:opacity-50"
+                          className="shrink-0 px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-widest transition disabled:cursor-not-allowed disabled:opacity-50 max-sm:w-full"
                           style={{
                             backgroundColor: SIGNAL,
                             color: "#131210",
@@ -1421,8 +1508,8 @@ export default function CheckoutPage() {
                     </div>
                   )}
 
-                 </>
-               )}
+                </>
+              )}
             </div>
 
             {/* DISCOUNT */}
@@ -1494,17 +1581,17 @@ export default function CheckoutPage() {
 
             <button
               type="button"
-              onClick={
-                handlePayment
-              }
-              className="mt-6 w-full py-4 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95"
+              onClick={handlePayment}
+              disabled={placingOrder}
+              className="mt-6 w-full py-4 font-mono text-[11px] font-bold uppercase tracking-widest transition hover:brightness-95 disabled:opacity-50 sm:text-xs"
               style={{
                 backgroundColor: SIGNAL,
                 color: "#131210",
               }}
             >
-              Proceed to Payment ·{" "}
-              {fmt(finalTotal)}
+              {placingOrder
+                ? "Placing Order..."
+                : `Proceed to Payment · ${fmt(finalTotal)}`}
             </button>
 
             <Link

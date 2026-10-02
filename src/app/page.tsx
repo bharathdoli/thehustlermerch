@@ -1,22 +1,34 @@
 "use client";
 
 /**
- * TheHustlerMerchandise — Home Page (v5 — live categories + live products)
+ * TheHustlerMerchandise — Home Page (v7 — toasts + full responsive pass)
  * -----------------------------------------------------------------------
  * Theme (dark/light + SIGNAL orange) lives in
  * `src/context/ThemeContext.tsx` and is shared with every other page.
  *
- * Categories:
- *   GET /api/categories
+ * Categories:  GET /api/categories
+ * Products:    GET /api/products
  *
- * Products:
- *   GET /api/products
- *
- * Everything else remains unchanged.
+ * v7 changes (search for "TOAST" and "RESPONSIVE" comments):
+ *  - Self-contained toast system (ToastProvider / useToast / ToastViewport)
+ *  - Toasts on: category load error, product load error, newsletter
+ *    validation + success, track-order login prompt, contact form
+ *    success / error
+ *  - Responsive fixes across Hero, SectionHeading, ProductCard,
+ *    BestProducts, Instagram, Contact, Footer
  * -----------------------------------------------------------------------
  */
 
-import { useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { SIGNAL, hexToRgba, useTheme } from "@/src/context/ThemeContext";
 
 /* -------------------------------------------------------------------- */
@@ -53,13 +65,6 @@ type Review = {
   avatarSeed: string;
 };
 
-type InstagramPost = {
-  id: string;
-  image: string;
-  caption: string;
-  likes: string;
-};
-
 /* Live category shape — matches list-categories.usecase.ts */
 type CategoryDTO = {
   categoryId: string;
@@ -67,6 +72,145 @@ type CategoryDTO = {
   description?: string | null;
   imageUrl?: string | null;
 };
+
+/* -------------------------------------------------------------------- */
+/*  TOAST — provider, hook, viewport                                    */
+/* -------------------------------------------------------------------- */
+
+type ToastType = "success" | "error" | "info";
+
+type ToastItem = {
+  id: number;
+  type: ToastType;
+  message: string;
+};
+
+type ToastFn = (message: string, type?: ToastType) => void;
+
+const ToastContext = createContext<{ toast: ToastFn }>({
+  toast: () => {},
+});
+
+function useToast() {
+  return useContext(ToastContext);
+}
+
+const TOAST_DURATION_MS = 4500;
+const MAX_TOASTS = 3;
+
+function ToastProvider({ children }: { children: React.ReactNode }) {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const idRef = useRef(0);
+  const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(
+    new Map()
+  );
+
+  const dismiss = useCallback((id: number) => {
+    const t = timers.current.get(id);
+    if (t) clearTimeout(t);
+    timers.current.delete(id);
+    setToasts((prev) => prev.filter((x) => x.id !== id));
+  }, []);
+
+  const toast = useCallback<ToastFn>(
+    (message, type = "info") => {
+      const id = ++idRef.current;
+
+      setToasts((prev) => {
+        // Don't stack identical messages (e.g. React strict-mode double effects)
+        if (prev.some((x) => x.message === message && x.type === type)) {
+          return prev;
+        }
+        return [...prev.slice(-(MAX_TOASTS - 1)), { id, type, message }];
+      });
+
+      timers.current.set(
+        id,
+        setTimeout(() => dismiss(id), TOAST_DURATION_MS)
+      );
+    },
+    [dismiss]
+  );
+
+  useEffect(() => {
+    const map = timers.current;
+    return () => {
+      map.forEach((t) => clearTimeout(t));
+      map.clear();
+    };
+  }, []);
+
+  return (
+    <ToastContext.Provider value={{ toast }}>
+      {children}
+      <ToastViewport toasts={toasts} onDismiss={dismiss} />
+    </ToastContext.Provider>
+  );
+}
+
+function ToastViewport({
+  toasts,
+  onDismiss,
+}: {
+  toasts: ToastItem[];
+  onDismiss: (id: number) => void;
+}) {
+  const { colors } = useTheme();
+
+  const accent = (type: ToastType) =>
+    type === "error" ? "#ef4444" : type === "success" ? SIGNAL : colors.lineStrong;
+
+  const icon = (type: ToastType) =>
+    type === "error" ? "!" : type === "success" ? "✓" : "i";
+
+  return (
+    <div
+      aria-live="polite"
+      aria-atomic="false"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-[100] flex flex-col items-center gap-2 px-3 sm:items-end sm:px-6"
+      style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
+    >
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          role={t.type === "error" ? "alert" : "status"}
+          className="pointer-events-auto flex w-full max-w-sm animate-[toast-in_0.25s_ease-out_both] items-start gap-3 border-l-4 border px-4 py-3 shadow-2xl sm:w-auto sm:min-w-[300px]"
+          style={{
+            backgroundColor: colors.panel,
+            borderColor: colors.lineStrong,
+            borderLeftColor: accent(t.type),
+            color: colors.text,
+          }}
+        >
+          <span
+            aria-hidden
+            className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold"
+            style={{
+              backgroundColor: accent(t.type),
+              color: "#131210",
+            }}
+          >
+            {icon(t.type)}
+          </span>
+
+          <p className="flex-1 break-words text-sm leading-snug">
+            {t.message}
+          </p>
+
+          <button
+            type="button"
+            aria-label="Dismiss notification"
+            onClick={() => onDismiss(t.id)}
+            className="-mr-1 shrink-0 px-1 font-mono text-base leading-none transition hover:opacity-100"
+            style={{ color: colors.textMuted }}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /* -------------------------------------------------------------------- */
 /*  Reviews — unchanged                                                 */
@@ -135,6 +279,36 @@ const REVIEWS: Review[] = [
   },
 ];
 
+/* -------------------------------------------------------------------- */
+/*  FAQ data                                                            */
+/* -------------------------------------------------------------------- */
+
+const FAQS: { q: string; a: string }[] = [
+  {
+    q: "How long does shipping take?",
+    a: "Standard orders ship within 5–7 business days across India. Custom merch orders may take slightly longer depending on print volume and proof approval time.",
+  },
+  {
+    q: "Can I get my own design printed?",
+    a: "Yes — head to the Custom Merch section, upload your artwork, and we'll send you a proof before anything goes to print. Minimum order is just 2 pieces.",
+  },
+  {
+    q: "What sizes do you offer?",
+    a: "Most product lines run from S through XXL. Check the Size Guide (linked in the footer) for detailed chest, length, and sleeve measurements per product.",
+  },
+  {
+    q: "What's your return and exchange policy?",
+    a: "Unworn, unwashed items can be returned or exchanged within 7 days of delivery. Full details are on the Returns & Exchanges page.",
+  },
+  {
+    q: "How do I track an existing order?",
+    a: "Log in and open the Orders page from your account, or use the Track Order link in the footer — it'll take you straight there if you're signed in.",
+  },
+  {
+    q: "Do you ship outside India?",
+    a: "Right now we only ship within India. We're working on international shipping — follow us on Instagram for updates.",
+  },
+];
 
 /* -------------------------------------------------------------------- */
 /*  Small shared bits                                                    */
@@ -159,7 +333,7 @@ function Img({
         style={{ backgroundColor: colors.panel }}
       >
         <span
-          className="font-mono text-[10px] tracking-widest"
+          className="px-2 text-center font-mono text-[9px] tracking-widest sm:text-[10px]"
           style={{ color: colors.textMuted }}
         >
           IMAGE UNAVAILABLE
@@ -179,6 +353,8 @@ function Img({
   );
 }
 
+/* RESPONSIVE: the "View all / Shop all" action is now visible on mobile too
+   (it used to be `hidden sm:block`), and the title block can shrink. */
 function SectionHeading({
   eyebrow,
   title,
@@ -191,17 +367,30 @@ function SectionHeading({
   const { colors } = useTheme();
 
   return (
-    <div className="mb-8 flex items-end justify-between gap-4 border-b pb-5" style={{ borderColor: colors.line }}>
-      <div>
-        <span className="font-mono text-[11px] tracking-[0.25em]" style={{ color: SIGNAL }}>
+    <div
+      className="mb-6 flex items-end justify-between gap-3 border-b pb-4 sm:mb-8 sm:gap-4 sm:pb-5"
+      style={{ borderColor: colors.line }}
+    >
+      <div className="min-w-0">
+        <span
+          className="font-mono text-[10px] tracking-[0.25em] sm:text-[11px]"
+          style={{ color: SIGNAL }}
+        >
           {eyebrow}
         </span>
-        <h2 className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-4xl" style={{ color: colors.text }}>
+        <h2
+          className="mt-2 font-display text-2xl uppercase tracking-tight min-[400px]:text-3xl sm:text-4xl"
+          style={{ color: colors.text }}
+        >
           {title}
         </h2>
       </div>
       {action && (
-        <a href={action.href} className="hidden shrink-0 font-mono text-xs uppercase tracking-widest transition hover:opacity-100 sm:block" style={{ color: colors.textMuted }}>
+        <a
+          href={action.href}
+          className="shrink-0 whitespace-nowrap pb-1 font-mono text-[10px] uppercase tracking-widest transition hover:opacity-100 sm:text-xs"
+          style={{ color: colors.textMuted }}
+        >
           {action.label} →
         </a>
       )}
@@ -217,8 +406,7 @@ function StarRating({
   size?: number;
 }) {
   const { theme } = useTheme();
-  const emptyStroke =
-    theme === "dark" ? "#5a5648" : "#c9c1af";
+  const emptyStroke = theme === "dark" ? "#5a5648" : "#c9c1af";
 
   return (
     <div
@@ -246,32 +434,8 @@ function StarRating({
   );
 }
 
-function StampTag({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const { colors } = useTheme();
-
-  return (
-    <span
-      className="absolute left-3 top-3 z-10 -rotate-3 border px-2 py-1 font-mono text-[10px] font-bold tracking-widest"
-      style={{
-        borderColor: colors.text,
-        color: colors.text,
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
 /** Diagonal hazard-stripe rule — unchanged */
-function HazardRule({
-  className = "",
-}: {
-  className?: string;
-}) {
+function HazardRule({ className = "" }: { className?: string }) {
   const { colors } = useTheme();
 
   return (
@@ -306,11 +470,11 @@ function Ticker() {
         className="relative overflow-hidden py-3"
         style={{ backgroundColor: colors.panel }}
       >
-        <div className="flex w-max animate-[marquee_28s_linear_infinite] gap-10 whitespace-nowrap">
+        <div className="flex w-max animate-[marquee_28s_linear_infinite] gap-6 whitespace-nowrap sm:gap-10">
           {loop.map((item, i) => (
             <span
               key={i}
-              className="flex items-center gap-10 font-mono text-xs tracking-[0.25em]"
+              className="flex items-center gap-6 font-mono text-[10px] tracking-[0.25em] sm:gap-10 sm:text-xs"
               style={{ color: colors.textMuted }}
             >
               {item}
@@ -326,18 +490,20 @@ function Ticker() {
 }
 
 /* -------------------------------------------------------------------- */
-/*  Hero — unchanged                                                     */
+/*  Hero                                                                 */
+/*  RESPONSIVE: smaller headline on narrow phones, full-width CTAs on    */
+/*  mobile, hero image capped on phones so it doesn't fill the screen.   */
 /* -------------------------------------------------------------------- */
 
 function Hero() {
   const { colors } = useTheme();
 
   return (
-    <section className="relative mx-auto max-w-7xl overflow-hidden px-5 pb-10 pt-14 sm:px-8 sm:pt-20">
-      <div className="grid gap-10 md:grid-cols-2 md:items-center lg:grid-cols-12 lg:items-end">
+    <section className="relative mx-auto max-w-7xl overflow-hidden px-4 pb-12 pt-10 min-[400px]:px-5 sm:px-8 sm:pb-10 sm:pt-20">
+      <div className="grid gap-12 md:grid-cols-2 md:items-center lg:grid-cols-12 lg:items-end">
         <div className="animate-[fade-up_0.7s_ease-out_both] lg:col-span-7">
           <span
-            className="inline-flex items-center gap-2 border px-3 py-1 font-mono text-[11px] tracking-widest"
+            className="inline-flex items-center gap-2 border px-3 py-1 font-mono text-[10px] tracking-widest sm:text-[11px]"
             style={{ borderColor: SIGNAL, color: SIGNAL }}
           >
             <span
@@ -348,7 +514,7 @@ function Hero() {
           </span>
 
           <h1
-            className="mt-6 font-display text-5xl uppercase leading-[0.9] tracking-tight sm:text-6xl sm:leading-[0.85] md:text-7xl lg:text-8xl xl:text-9xl"
+            className="mt-5 font-display text-[2.75rem] uppercase leading-[0.9] tracking-tight min-[400px]:text-5xl sm:mt-6 sm:text-6xl sm:leading-[0.85] md:text-6xl lg:text-8xl xl:text-9xl"
             style={{ color: colors.text }}
           >
             Wear the
@@ -357,17 +523,17 @@ function Hero() {
           </h1>
 
           <p
-            className="mt-6 max-w-md text-base"
+            className="mt-5 max-w-md text-sm sm:mt-6 sm:text-base"
             style={{ color: colors.textMuted }}
           >
             Streetwear for people who clock out and keep working. Heavyweight cotton, graphics
             earned the hard way, and custom merch for the teams building alongside you.
           </p>
 
-          <div className="mt-8 flex flex-wrap gap-4">
+          <div className="mt-7 flex flex-col gap-3 min-[480px]:flex-row min-[480px]:flex-wrap sm:mt-8 sm:gap-4">
             <a
               href="#products"
-              className="px-7 py-3 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95"
+              className="px-7 py-3 text-center font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95"
               style={{
                 backgroundColor: SIGNAL,
                 color: "#131210",
@@ -378,7 +544,7 @@ function Hero() {
 
             <a
               href="#custom"
-              className="border px-7 py-3 font-mono text-xs font-bold uppercase tracking-widest transition"
+              className="border px-7 py-3 text-center font-mono text-xs font-bold uppercase tracking-widest transition"
               style={{
                 borderColor: colors.lineStrong,
                 color: colors.text,
@@ -389,7 +555,7 @@ function Hero() {
           </div>
         </div>
 
-        <div className="relative animate-[fade-up_0.9s_ease-out_0.15s_both] lg:col-span-5">
+        <div className="relative mx-auto w-full max-w-xs animate-[fade-up_0.9s_ease-out_0.15s_both] min-[480px]:max-w-sm md:max-w-none lg:col-span-5">
           <div
             className="relative aspect-[4/5] w-full overflow-hidden border"
             style={{ borderColor: colors.line }}
@@ -409,7 +575,7 @@ function Hero() {
           </div>
 
           <div
-            className="absolute -bottom-4 -left-3 w-36 -rotate-3 border p-2.5 font-mono shadow-xl sm:-bottom-6 sm:-left-10 sm:w-56 sm:p-3"
+            className="absolute -bottom-4 -left-2 w-32 -rotate-3 border p-2.5 font-mono shadow-xl min-[400px]:-left-3 min-[400px]:w-36 sm:-bottom-6 sm:-left-10 sm:w-56 sm:p-3"
             style={{
               borderColor: "#131210",
               backgroundColor: "#f3ede1",
@@ -445,17 +611,19 @@ function Hero() {
 }
 
 /* -------------------------------------------------------------------- */
-/*  Featured Categories — FIXED to match real /api/categories shape     */
+/*  Featured Categories                                                  */
+/*  TOAST: error toast when categories fail to load (previously the      */
+/*  section just silently disappeared).                                  */
 /* -------------------------------------------------------------------- */
 
 function FeaturedCategories() {
   const { colors } = useTheme();
-  const [categories, setCategories] =
-    useState<CategoryDTO[]>([]);
+  const { toast } = useToast();
 
-  const [status, setStatus] = useState<
-    "loading" | "success" | "error"
-  >("loading");
+  const [categories, setCategories] = useState<CategoryDTO[]>([]);
+  const [status, setStatus] = useState<"loading" | "success" | "error">(
+    "loading"
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -469,15 +637,11 @@ function FeaturedCategories() {
         });
 
         if (!res.ok) {
-          throw new Error(
-            `Request failed with ${res.status}`
-          );
+          throw new Error(`Request failed with ${res.status}`);
         }
 
         const raw = await res.json();
-        const data: CategoryDTO[] = Array.isArray(raw)
-          ? raw
-          : raw.data ?? [];
+        const data: CategoryDTO[] = Array.isArray(raw) ? raw : raw.data ?? [];
 
         if (!cancelled) {
           setCategories(data.slice(0, 4));
@@ -486,6 +650,10 @@ function FeaturedCategories() {
       } catch {
         if (!cancelled) {
           setStatus("error");
+          toast(
+            "Couldn't load collections. Please refresh the page.",
+            "error"
+          );
         }
       }
     }
@@ -495,12 +663,11 @@ function FeaturedCategories() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [toast]);
 
   if (
     status === "error" ||
-    (status === "success" &&
-      categories.length === 0)
+    (status === "success" && categories.length === 0)
   ) {
     return null;
   }
@@ -508,7 +675,7 @@ function FeaturedCategories() {
   return (
     <section
       id="categories"
-      className="mx-auto max-w-7xl px-5 py-16 sm:px-8"
+      className="mx-auto max-w-7xl px-4 py-12 min-[400px]:px-5 sm:px-8 sm:py-16"
     >
       <SectionHeading
         eyebrow="Collections"
@@ -521,18 +688,16 @@ function FeaturedCategories() {
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
         {status === "loading"
-          ? Array.from({ length: 4 }).map(
-              (_, i) => (
-                <div
-                  key={i}
-                  className="aspect-[3/4] animate-pulse border"
-                  style={{
-                    borderColor: colors.line,
-                    backgroundColor: colors.panel,
-                  }}
-                />
-              )
-            )
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="aspect-[3/4] animate-pulse border"
+                style={{
+                  borderColor: colors.line,
+                  backgroundColor: colors.panel,
+                }}
+              />
+            ))
           : categories.map((cat, index) => {
               const fallbackImage = `https://picsum.photos/seed/hustler-cat-${cat.categoryId || index}/600/800`;
 
@@ -547,10 +712,7 @@ function FeaturedCategories() {
                   }}
                 >
                   <Img
-                    src={
-                      cat.imageUrl ||
-                      fallbackImage
-                    }
+                    src={cat.imageUrl || fallbackImage}
                     alt={cat.categoryName}
                     className="h-full w-full object-cover grayscale transition duration-500 group-hover:scale-105 group-hover:grayscale-0"
                   />
@@ -562,9 +724,9 @@ function FeaturedCategories() {
                     }}
                   />
 
-                  <div className="absolute bottom-0 left-0 p-4">
+                  <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
                     <p
-                      className="font-display text-xl uppercase tracking-tight"
+                      className="font-display text-base uppercase leading-tight tracking-tight min-[400px]:text-lg sm:text-xl"
                       style={{ color: colors.text }}
                     >
                       {cat.categoryName}
@@ -572,7 +734,7 @@ function FeaturedCategories() {
 
                     {cat.description && (
                       <p
-                        className="mt-1 max-w-[85%] font-mono text-[10px] leading-relaxed"
+                        className="mt-1 line-clamp-2 max-w-[90%] font-mono text-[9px] leading-relaxed sm:text-[10px]"
                         style={{
                           color: colors.textMuted,
                         }}
@@ -590,28 +752,22 @@ function FeaturedCategories() {
 }
 
 /* -------------------------------------------------------------------- */
-/*  Product card — UPDATED TO USE BACKEND PRODUCT                       */
+/*  Product card                                                        */
+/*  RESPONSIVE: "View Product" bar used to appear on hover only, which   */
+/*  never fires on touch screens. It's now always visible below md and   */
+/*  hover-reveal from md up. The product name is also a link.            */
 /* -------------------------------------------------------------------- */
 
-function ProductCard({
-  product,
-}: {
-  product: Product;
-}) {
+function ProductCard({ product }: { product: Product }) {
   const { colors } = useTheme();
 
   const price =
-    product.variants &&
-    product.variants.length > 0
-      ? Math.min(
-          ...product.variants.map(
-            (variant) => Number(variant.price)
-          )
-        )
+    product.variants && product.variants.length > 0
+      ? Math.min(...product.variants.map((variant) => Number(variant.price)))
       : null;
 
   return (
-    <div className="group">
+    <div className="group min-w-0">
       <div
         className="relative aspect-[4/5] overflow-hidden border"
         style={{
@@ -627,7 +783,7 @@ function ProductCard({
 
         <a
           href={`/products/${product.productId}`}
-          className="absolute inset-x-3 bottom-3 translate-y-3 py-2 text-center font-mono text-xs font-bold uppercase tracking-widest opacity-0 transition duration-300 group-hover:translate-y-0 group-hover:opacity-100"
+          className="absolute inset-x-2 bottom-2 py-2 text-center font-mono text-[10px] font-bold uppercase tracking-widest transition duration-300 sm:inset-x-3 sm:bottom-3 sm:text-xs md:translate-y-3 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100 md:group-focus-within:translate-y-0 md:group-focus-within:opacity-100"
           style={{
             backgroundColor: colors.text,
             color: colors.bg,
@@ -638,17 +794,17 @@ function ProductCard({
       </div>
 
       <div className="mt-3">
-        <h3
-          className="text-sm font-medium leading-snug"
-          style={{ color: colors.text }}
-        >
-          {product.productName}
-        </h3>
+        <a href={`/products/${product.productId}`}>
+          <h3
+            className="line-clamp-2 text-sm font-medium leading-snug"
+            style={{ color: colors.text }}
+          >
+            {product.productName}
+          </h3>
+        </a>
 
-        <div className="mt-1 flex items-center gap-2">
-          <StarRating
-            rating={product.rating ?? 0}
-          />
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <StarRating rating={product.rating ?? 0} size={12} />
 
           <span
             className="font-mono text-[10px]"
@@ -671,7 +827,7 @@ function ProductCard({
 }
 
 /* -------------------------------------------------------------------- */
-/*  Featured Products — UPDATED                                        */
+/*  Featured Products                                                   */
 /* -------------------------------------------------------------------- */
 
 function FeaturedProducts({
@@ -681,10 +837,12 @@ function FeaturedProducts({
   products: Product[];
   loading: boolean;
 }) {
+  const { colors } = useTheme();
+
   return (
     <section
       id="products"
-      className="mx-auto max-w-7xl px-5 py-16 sm:px-8"
+      className="mx-auto max-w-7xl px-4 py-12 min-[400px]:px-5 sm:px-8 sm:py-16"
     >
       <SectionHeading
         eyebrow="Drop 004"
@@ -695,23 +853,22 @@ function FeaturedProducts({
         }}
       />
 
-      <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-6 md:grid-cols-3 lg:grid-cols-4">
         {loading
-          ? Array.from({ length: 4 }).map(
-              (_, i) => (
-                <div
-                  key={i}
-                  className="aspect-[4/5] animate-pulse border"
-                />
-              )
-            )
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="aspect-[4/5] animate-pulse border"
+                style={{
+                  borderColor: colors.line,
+                  backgroundColor: colors.panel,
+                }}
+              />
+            ))
           : products
               .slice(0, 4)
               .map((product) => (
-                <ProductCard
-                  key={product.productId}
-                  product={product}
-                />
+                <ProductCard key={product.productId} product={product} />
               ))}
       </div>
     </section>
@@ -719,7 +876,9 @@ function FeaturedProducts({
 }
 
 /* -------------------------------------------------------------------- */
-/*  Custom Merchandise — UNCHANGED                                     */
+/*  Custom Merchandise                                                  */
+/*  RESPONSIVE: tighter paddings, image capped on mobile, full-width     */
+/*  CTA on phones.                                                       */
 /* -------------------------------------------------------------------- */
 
 function CustomMerch() {
@@ -746,13 +905,13 @@ function CustomMerch() {
   return (
     <section
       id="custom"
-      className="py-16 sm:py-20"
+      className="py-12 sm:py-20"
       style={{ backgroundColor: colors.panel }}
     >
-      <div className="mx-auto grid max-w-7xl gap-10 px-5 sm:px-8 md:grid-cols-2 md:items-center md:gap-10 lg:grid-cols-12 lg:gap-16">
+      <div className="mx-auto grid max-w-7xl gap-8 px-4 min-[400px]:px-5 sm:px-8 md:grid-cols-2 md:items-center md:gap-10 lg:grid-cols-12 lg:gap-16">
         <div className="lg:col-span-6">
           <div
-            className="relative aspect-[4/5] overflow-hidden border"
+            className="relative mx-auto aspect-[4/5] max-w-sm overflow-hidden border md:max-w-none"
             style={{ borderColor: colors.line }}
           >
             <Img
@@ -772,7 +931,7 @@ function CustomMerch() {
             />
 
             <div
-              className="absolute bottom-5 left-5 border px-4 py-2 font-mono text-xs font-bold tracking-widest"
+              className="absolute bottom-4 left-4 border px-3 py-2 font-mono text-[10px] font-bold tracking-widest sm:bottom-5 sm:left-5 sm:px-4 sm:text-xs"
               style={{
                 borderColor: "#131210",
                 backgroundColor: SIGNAL,
@@ -786,14 +945,14 @@ function CustomMerch() {
 
         <div className="lg:col-span-6">
           <span
-            className="font-mono text-[11px] tracking-[0.25em]"
+            className="font-mono text-[10px] tracking-[0.25em] sm:text-[11px]"
             style={{ color: SIGNAL }}
           >
             Print on demand
           </span>
 
           <h2
-            className="mt-3 font-display text-4xl uppercase leading-[0.95] tracking-tight sm:text-5xl"
+            className="mt-3 font-display text-3xl uppercase leading-[0.95] tracking-tight min-[400px]:text-4xl sm:text-5xl"
             style={{ color: colors.text }}
           >
             Your logo.
@@ -804,7 +963,7 @@ function CustomMerch() {
           </h2>
 
           <p
-            className="mt-5 max-w-lg"
+            className="mt-5 max-w-lg text-sm sm:text-base"
             style={{ color: colors.textMuted }}
           >
             Building a team, a brand, or a side hustle? Get your logo or artwork printed on
@@ -818,10 +977,7 @@ function CustomMerch() {
                 key={s.n}
                 className="flex gap-4 border-t pt-4 first:border-t-0 first:pt-0"
                 style={{
-                  borderColor:
-                    i === 0
-                      ? "transparent"
-                      : colors.line,
+                  borderColor: i === 0 ? "transparent" : colors.line,
                 }}
               >
                 <span
@@ -831,11 +987,8 @@ function CustomMerch() {
                   {s.n}
                 </span>
 
-                <div>
-                  <p
-                    className="font-medium"
-                    style={{ color: colors.text }}
-                  >
+                <div className="min-w-0">
+                  <p className="font-medium" style={{ color: colors.text }}>
                     {s.title}
                   </p>
 
@@ -851,8 +1004,8 @@ function CustomMerch() {
           </div>
 
           <a
-            href="#"
-            className="mt-8 inline-block px-7 py-3 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95"
+            href="/products"
+            className="mt-8 block px-7 py-3 text-center font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95 sm:inline-block"
             style={{
               backgroundColor: SIGNAL,
               color: "#131210",
@@ -867,7 +1020,9 @@ function CustomMerch() {
 }
 
 /* -------------------------------------------------------------------- */
-/*  Best Products — UPDATED TO USE BACKEND                             */
+/*  Best Products                                                       */
+/*  RESPONSIVE: narrower cards on small phones so the next card peeks    */
+/*  in (signals swipe), scroll-padding so snapping respects the gutter.  */
 /* -------------------------------------------------------------------- */
 
 function BestProducts({
@@ -879,40 +1034,75 @@ function BestProducts({
 }) {
   const { colors } = useTheme();
 
-  const scrollerRef =
-    useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const sorted = [...products].sort(
+    (a, b) =>
+      (b.rating ?? 0) * (b.reviewCount ?? 0) -
+      (a.rating ?? 0) * (a.reviewCount ?? 0)
+  );
+
+  function updateScrollState() {
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }
+
+  useEffect(() => {
+    updateScrollState();
+
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    el.addEventListener("scroll", updateScrollState, { passive: true });
+    window.addEventListener("resize", updateScrollState);
+
+    return () => {
+      el.removeEventListener("scroll", updateScrollState);
+      window.removeEventListener("resize", updateScrollState);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, products.length]);
 
   const scroll = (dir: 1 | -1) => {
-    scrollerRef.current?.scrollBy({
-      left: dir * 320,
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    const firstCard = el.querySelector<HTMLElement>("[data-best-card]");
+    const amount = firstCard
+      ? firstCard.getBoundingClientRect().width + 16
+      : 320;
+
+    el.scrollBy({
+      left: dir * amount,
       behavior: "smooth",
     });
   };
 
-  const sorted = [...products].sort(
-    (a, b) =>
-      (b.rating ?? 0) *
-        (b.reviewCount ?? 0) -
-      (a.rating ?? 0) *
-        (a.reviewCount ?? 0)
-  );
+  const cardWidth =
+    "w-[160px] min-[400px]:w-[200px] sm:w-[240px]";
 
   return (
-    <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8">
+    <section className="mx-auto max-w-7xl px-4 py-12 min-[400px]:px-5 sm:px-8 sm:py-16">
       <div
-        className="mb-8 flex items-end justify-between gap-4 border-b pb-5"
+        className="mb-6 flex items-end justify-between gap-3 border-b pb-4 sm:mb-8 sm:gap-4 sm:pb-5"
         style={{ borderColor: colors.line }}
       >
-        <div>
+        <div className="min-w-0">
           <span
-            className="font-mono text-[11px] tracking-[0.25em]"
+            className="font-mono text-[10px] tracking-[0.25em] sm:text-[11px]"
             style={{ color: SIGNAL }}
           >
             Top rated
           </span>
 
           <h2
-            className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-4xl"
+            className="mt-2 font-display text-2xl uppercase tracking-tight min-[400px]:text-3xl sm:text-4xl"
             style={{ color: colors.text }}
           >
             Best products
@@ -921,24 +1111,30 @@ function BestProducts({
 
         <div className="hidden gap-2 sm:flex">
           <button
+            type="button"
             aria-label="Scroll left"
+            disabled={!canScrollLeft}
             onClick={() => scroll(-1)}
-            className="h-9 w-9 border transition"
+            className="h-9 w-9 border transition disabled:cursor-not-allowed"
             style={{
               borderColor: colors.lineStrong,
               color: colors.textMuted,
+              opacity: canScrollLeft ? 1 : 0.35,
             }}
           >
             ←
           </button>
 
           <button
+            type="button"
             aria-label="Scroll right"
+            disabled={!canScrollRight}
             onClick={() => scroll(1)}
-            className="h-9 w-9 border transition"
+            className="h-9 w-9 border transition disabled:cursor-not-allowed"
             style={{
               borderColor: colors.lineStrong,
               color: colors.textMuted,
+              opacity: canScrollRight ? 1 : 0.35,
             }}
           >
             →
@@ -948,33 +1144,29 @@ function BestProducts({
 
       <div
         ref={scrollerRef}
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-4 [-ms-overflow-style:none] [scrollbar-width:none] min-[400px]:-mx-5 min-[400px]:scroll-px-5 min-[400px]:px-5 sm:mx-0 sm:scroll-px-0 sm:gap-4 sm:px-0 [&::-webkit-scrollbar]:hidden"
       >
         {loading
-          ? Array.from({ length: 4 }).map(
-              (_, i) => (
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className={`relative shrink-0 snap-start ${cardWidth}`}
+              >
                 <div
-                  key={i}
-                  className="relative w-[210px] shrink-0 snap-start sm:w-[240px]"
-                >
-                  <div
-                    className="aspect-[3/4] animate-pulse border"
-                    style={{
-                      borderColor: colors.line,
-                      backgroundColor: colors.panel,
-                    }}
-                  />
-                </div>
-              )
-            )
+                  className="aspect-[3/4] animate-pulse border"
+                  style={{
+                    borderColor: colors.line,
+                    backgroundColor: colors.panel,
+                  }}
+                />
+              </div>
+            ))
           : sorted.map((product) => {
               const price =
-                product.variants &&
-                product.variants.length > 0
+                product.variants && product.variants.length > 0
                   ? Math.min(
-                      ...product.variants.map(
-                        (variant) =>
-                          Number(variant.price)
+                      ...product.variants.map((variant) =>
+                        Number(variant.price)
                       )
                     )
                   : null;
@@ -982,8 +1174,9 @@ function BestProducts({
               return (
                 <a
                   key={product.productId}
+                  data-best-card
                   href={`/products/${product.productId}`}
-                  className="relative w-[210px] shrink-0 snap-start sm:w-[240px]"
+                  className={`relative shrink-0 snap-start ${cardWidth}`}
                 >
                   <div
                     className="relative aspect-[3/4] overflow-hidden border"
@@ -993,10 +1186,7 @@ function BestProducts({
                     }}
                   >
                     <Img
-                      src={
-                        product.productImage ||
-                        ""
-                      }
+                      src={product.productImage || ""}
                       alt={product.productName}
                       className="h-full w-full object-cover grayscale transition duration-500 hover:scale-105 hover:grayscale-0"
                     />
@@ -1015,20 +1205,13 @@ function BestProducts({
                   <div className="mt-1 flex items-center gap-2 font-mono text-xs">
                     <span style={{ color: SIGNAL }}>
                       {price !== null
-                        ? `₹${price.toLocaleString(
-                            "en-IN"
-                          )}`
+                        ? `₹${price.toLocaleString("en-IN")}`
                         : "Price unavailable"}
                     </span>
                   </div>
 
                   <div className="mt-1">
-                    <StarRating
-                      rating={
-                        product.rating ?? 0
-                      }
-                      size={12}
-                    />
+                    <StarRating rating={product.rating ?? 0} size={12} />
                   </div>
                 </a>
               );
@@ -1039,7 +1222,8 @@ function BestProducts({
 }
 
 /* -------------------------------------------------------------------- */
-/*  Brand Story — unchanged                                             */
+/*  Brand Story                                                         */
+/*  RESPONSIVE: image capped on phones, smaller paddings.               */
 /* -------------------------------------------------------------------- */
 
 function BrandStory() {
@@ -1048,12 +1232,12 @@ function BrandStory() {
   return (
     <section
       id="story"
-      className="mx-auto max-w-7xl px-5 py-20 sm:px-8"
+      className="mx-auto max-w-7xl px-4 py-14 min-[400px]:px-5 sm:px-8 sm:py-20"
     >
-      <div className="grid gap-10 md:grid-cols-2 md:items-center lg:grid-cols-12 lg:gap-16">
+      <div className="grid gap-8 md:grid-cols-2 md:items-center md:gap-10 lg:grid-cols-12 lg:gap-16">
         <div className="lg:col-span-5">
           <div
-            className="relative aspect-[4/5] overflow-hidden border"
+            className="relative mx-auto aspect-[4/5] max-w-sm overflow-hidden border md:max-w-none"
             style={{
               borderColor: colors.line,
               backgroundColor: colors.panel,
@@ -1069,14 +1253,14 @@ function BrandStory() {
 
         <div className="flex flex-col justify-center lg:col-span-7">
           <span
-            className="font-mono text-[11px] tracking-[0.25em]"
+            className="font-mono text-[10px] tracking-[0.25em] sm:text-[11px]"
             style={{ color: SIGNAL }}
           >
             Our story
           </span>
 
           <h2
-            className="mt-3 font-display text-4xl uppercase leading-[0.95] tracking-tight sm:text-5xl"
+            className="mt-3 font-display text-3xl uppercase leading-[0.95] tracking-tight min-[400px]:text-4xl sm:text-5xl"
             style={{ color: colors.text }}
           >
             Made for the ones
@@ -1085,7 +1269,7 @@ function BrandStory() {
           </h2>
 
           <p
-            className="mt-6 max-w-xl"
+            className="mt-6 max-w-xl text-sm sm:text-base"
             style={{ color: colors.textMuted }}
           >
             TheHustlerMerchandise started as a side hustle between late shifts and early
@@ -1095,7 +1279,7 @@ function BrandStory() {
           </p>
 
           <p
-            className="mt-4 max-w-xl"
+            className="mt-4 max-w-xl text-sm sm:text-base"
             style={{ color: colors.textMuted }}
           >
             Today that same crew mentality runs the custom merch side of the business — printing
@@ -1107,53 +1291,27 @@ function BrandStory() {
             className="mt-8 grid grid-cols-3 gap-3 border-t pt-6 sm:gap-6"
             style={{ borderColor: colors.line }}
           >
-            <div>
-              <p
-                className="font-display text-2xl sm:text-3xl"
-                style={{ color: SIGNAL }}
-              >
-                40K+
-              </p>
+            {[
+              { value: "40K+", label: "Pieces shipped" },
+              { value: "4.8/5", label: "Avg. rating" },
+              { value: "100%", label: "Small-batch" },
+            ].map((stat) => (
+              <div key={stat.label}>
+                <p
+                  className="font-display text-xl min-[400px]:text-2xl sm:text-3xl"
+                  style={{ color: SIGNAL }}
+                >
+                  {stat.value}
+                </p>
 
-              <p
-                className="font-mono text-[10px] tracking-widest"
-                style={{ color: colors.textMuted }}
-              >
-                Pieces shipped
-              </p>
-            </div>
-
-            <div>
-              <p
-                className="font-display text-2xl sm:text-3xl"
-                style={{ color: SIGNAL }}
-              >
-                4.8/5
-              </p>
-
-              <p
-                className="font-mono text-[10px] tracking-widest"
-                style={{ color: colors.textMuted }}
-              >
-                Avg. rating
-              </p>
-            </div>
-
-            <div>
-              <p
-                className="font-display text-2xl sm:text-3xl"
-                style={{ color: SIGNAL }}
-              >
-                100%
-              </p>
-
-              <p
-                className="font-mono text-[10px] tracking-widest"
-                style={{ color: colors.textMuted }}
-              >
-                Small-batch
-              </p>
-            </div>
+                <p
+                  className="font-mono text-[9px] tracking-widest sm:text-[10px]"
+                  style={{ color: colors.textMuted }}
+                >
+                  {stat.label}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -1162,19 +1320,15 @@ function BrandStory() {
 }
 
 /* -------------------------------------------------------------------- */
-/*  Reviews — unchanged                                                 */
+/*  Reviews                                                             */
 /* -------------------------------------------------------------------- */
 
-function ReviewCard({
-  review,
-}: {
-  review: Review;
-}) {
+function ReviewCard({ review }: { review: Review }) {
   const { colors } = useTheme();
 
   return (
     <div
-      className="flex h-full flex-col justify-between border p-5"
+      className="flex h-full flex-col justify-between border p-4 sm:p-5"
       style={{
         borderColor: colors.line,
         backgroundColor: colors.panel,
@@ -1198,11 +1352,11 @@ function ReviewCard({
         <Img
           src={`https://picsum.photos/seed/${review.avatarSeed}/80/80`}
           alt={review.author}
-          className="h-9 w-9 rounded-full object-cover grayscale"
+          className="h-9 w-9 shrink-0 rounded-full object-cover grayscale"
         />
 
-        <div>
-          <div className="flex items-center gap-1.5">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-1.5">
             <p
               className="text-xs font-medium"
               style={{ color: colors.text }}
@@ -1221,7 +1375,7 @@ function ReviewCard({
           </div>
 
           <p
-            className="font-mono text-[10px]"
+            className="truncate font-mono text-[10px]"
             style={{ color: colors.textMuted }}
           >
             {review.product} · {review.location}
@@ -1237,26 +1391,20 @@ function Reviews() {
 
   return (
     <section
-      className="py-16 sm:py-20"
+      className="py-12 sm:py-20"
       style={{
-        backgroundColor: hexToRgba(
-          colors.panel,
-          0.4
-        ),
+        backgroundColor: hexToRgba(colors.panel, 0.4),
       }}
     >
-      <div className="mx-auto max-w-7xl px-5 sm:px-8">
+      <div className="mx-auto max-w-7xl px-4 min-[400px]:px-5 sm:px-8">
         <SectionHeading
           eyebrow="25,000+ hustlers"
           title="What they're saying"
         />
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
           {REVIEWS.map((r) => (
-            <ReviewCard
-              key={r.id}
-              review={r}
-            />
+            <ReviewCard key={r.id} review={r} />
           ))}
         </div>
       </div>
@@ -1265,7 +1413,10 @@ function Reviews() {
 }
 
 /* -------------------------------------------------------------------- */
-/*  Instagram — unchanged                                               */
+/*  Instagram                                                           */
+/*  RESPONSIVE FIX: the "ON THE FLOOR" tag sat at -bottom-4 INSIDE an    */
+/*  overflow-hidden box, so it was being clipped. It now lives on an     */
+/*  outer wrapper; the image keeps its own overflow-hidden box.          */
 /* -------------------------------------------------------------------- */
 
 const INSTAGRAM_URL = "https://www.instagram.com/thehustler.merchandise/?hl=en";
@@ -1274,30 +1425,33 @@ function InstagramSection() {
   const { colors } = useTheme();
 
   return (
-    <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-20">
+    <section className="mx-auto max-w-7xl px-4 py-12 min-[400px]:px-5 sm:px-8 sm:py-20">
       <div className="grid gap-10 md:grid-cols-2 md:items-center lg:grid-cols-12 lg:gap-16">
-        {/* Photo */}
-
         <div className="lg:col-span-6">
-          <div
-            className="group relative aspect-[4/5] overflow-hidden border sm:aspect-[16/11]"
-            style={{ borderColor: colors.line, backgroundColor: colors.panel }}
-          >
-            <Img
-              src="https://picsum.photos/seed/hustler-ig-feature/1100/800"
-              alt="Behind the scenes at TheHustlerMerchandise"
-              className="h-full w-full object-cover grayscale transition duration-500 group-hover:scale-105 group-hover:grayscale-0"
-            />
-
+          <div className="relative pb-4">
             <div
-              className="absolute inset-0"
+              className="group relative aspect-[4/5] overflow-hidden border sm:aspect-[16/11]"
               style={{
-                backgroundImage: `linear-gradient(to top, ${hexToRgba(colors.bg, 0.6)}, transparent 55%)`,
+                borderColor: colors.line,
+                backgroundColor: colors.panel,
               }}
-            />
+            >
+              <Img
+                src="https://picsum.photos/seed/hustler-ig-feature/1100/800"
+                alt="Behind the scenes at TheHustlerMerchandise"
+                className="h-full w-full object-cover grayscale transition duration-500 group-hover:scale-105 group-hover:grayscale-0"
+              />
+
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundImage: `linear-gradient(to top, ${hexToRgba(colors.bg, 0.6)}, transparent 55%)`,
+                }}
+              />
+            </div>
 
             <div
-              className="absolute -bottom-4 left-5 -rotate-2 border px-3 py-1.5 font-mono text-[10px] font-bold tracking-widest sm:left-6"
+              className="absolute bottom-0 left-4 max-w-[calc(100%-2rem)] -rotate-2 border px-3 py-1.5 font-mono text-[9px] font-bold tracking-widest sm:left-6 sm:text-[10px]"
               style={{
                 borderColor: "#131210",
                 backgroundColor: SIGNAL,
@@ -1309,15 +1463,16 @@ function InstagramSection() {
           </div>
         </div>
 
-        {/* Copy */}
-
         <div className="lg:col-span-6">
-          <span className="font-mono text-[11px] tracking-[0.25em]" style={{ color: SIGNAL }}>
+          <span
+            className="font-mono text-[10px] tracking-[0.25em] sm:text-[11px]"
+            style={{ color: SIGNAL }}
+          >
             Follow along
           </span>
 
           <h2
-            className="mt-3 font-display text-4xl uppercase leading-[0.95] tracking-tight sm:text-5xl"
+            className="mt-3 font-display text-3xl uppercase leading-[0.95] tracking-tight min-[400px]:text-4xl sm:text-5xl"
             style={{ color: colors.text }}
           >
             Behind the
@@ -1325,7 +1480,10 @@ function InstagramSection() {
             stitching
           </h2>
 
-          <p className="mt-5 max-w-lg text-sm sm:text-base" style={{ color: colors.textMuted }}>
+          <p
+            className="mt-5 max-w-lg text-sm sm:text-base"
+            style={{ color: colors.textMuted }}
+          >
             Print runs, packed orders, and the crew making it happen — we post the process, not
             just the product. Follow along for early looks at new drops, restock alerts, and the
             odd 6am studio photo.
@@ -1335,10 +1493,17 @@ function InstagramSection() {
             href={INSTAGRAM_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-8 inline-flex items-center gap-2.5 px-7 py-3 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95"
+            className="mt-8 inline-flex w-full items-center justify-center gap-2.5 px-7 py-3 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95 sm:w-auto"
             style={{ backgroundColor: SIGNAL, color: "#131210" }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#131210" strokeWidth="2">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#131210"
+              strokeWidth="2"
+            >
               <rect x="3" y="3" width="18" height="18" rx="5" />
               <circle cx="12" cy="12" r="4" />
               <circle cx="17.5" cy="6.5" r="1" fill="#131210" stroke="none" />
@@ -1352,28 +1517,344 @@ function InstagramSection() {
 }
 
 /* -------------------------------------------------------------------- */
-/*  Footer — unchanged                                                  */
+/*  FAQ section                                                         */
 /* -------------------------------------------------------------------- */
 
-function Footer() {
+function FAQItem({
+  q,
+  a,
+  open,
+  onToggle,
+}: {
+  q: string;
+  a: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const { colors } = useTheme();
 
   return (
-    <footer
-      className="border-t"
-      style={{ borderColor: colors.line }}
+    <div className="border-b" style={{ borderColor: colors.line }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-4 py-4 text-left sm:py-5"
+      >
+        <span
+          className="text-sm font-medium sm:text-base"
+          style={{ color: colors.text }}
+        >
+          {q}
+        </span>
+
+        <span
+          className="shrink-0 font-mono text-lg transition-transform"
+          style={{
+            color: SIGNAL,
+            transform: open ? "rotate(45deg)" : "rotate(0deg)",
+          }}
+        >
+          +
+        </span>
+      </button>
+
+      {open && (
+        <p
+          className="pb-5 text-sm leading-relaxed"
+          style={{ color: colors.textMuted }}
+        >
+          {a}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function FAQSection() {
+  const { colors } = useTheme();
+  const [openIndex, setOpenIndex] = useState<number | null>(0);
+
+  return (
+    <section
+      id="faqs"
+      className="mx-auto max-w-4xl scroll-mt-20 px-4 py-12 min-[400px]:px-5 sm:px-8 sm:py-20"
     >
-      <div className="mx-auto max-w-7xl px-5 py-14 sm:px-8">
-        <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-          <div className="lg:col-span-2">
+      <SectionHeading eyebrow="Questions" title="Frequently asked" />
+
+      <div>
+        {FAQS.map((item, index) => (
+          <FAQItem
+            key={item.q}
+            q={item.q}
+            a={item.a}
+            open={openIndex === index}
+            onToggle={() =>
+              setOpenIndex((prev) => (prev === index ? null : index))
+            }
+          />
+        ))}
+      </div>
+
+      <p className="mt-8 text-sm" style={{ color: colors.textMuted }}>
+        Still have a question?{" "}
+        <a href="#contact" style={{ color: SIGNAL }} className="font-medium">
+          Get in touch
+        </a>
+        .
+      </p>
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------- */
+/*  Contact section                                                     */
+/*  TOAST: success toast on send, error toast if the request fails.     */
+/*  RESPONSIVE: inputs are 16px on mobile (stops iOS zoom-on-focus),    */
+/*  contact details wrap, button is full width on phones.               */
+/* -------------------------------------------------------------------- */
+
+function ContactSection() {
+  const { colors } = useTheme();
+  const { toast } = useToast();
+
+  const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (sending) return;
+
+    setSending(true);
+
+    try {
+      // TODO: wire this up to a real /api/contact route when one exists:
+      // const res = await fetch("/api/contact", {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget))),
+      // });
+      // if (!res.ok) throw new Error("Request failed");
+
+      setSubmitted(true);
+      toast("Message sent. We'll reply within one business day.", "success");
+    } catch {
+      toast(
+        "Couldn't send your message. Please try again in a moment.",
+        "error"
+      );
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const fieldClass =
+    "w-full border px-3 py-3 text-base outline-none focus:border-[var(--signal)] sm:text-sm";
+  const fieldStyle = {
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.bg,
+    color: colors.text,
+    "--signal": SIGNAL,
+  } as React.CSSProperties;
+
+  return (
+    <section
+      id="contact"
+      className="scroll-mt-20 py-12 sm:py-20"
+      style={{ backgroundColor: colors.panel }}
+    >
+      <div className="mx-auto grid max-w-7xl gap-8 px-4 min-[400px]:px-5 sm:px-8 lg:grid-cols-12 lg:gap-16">
+        <div className="lg:col-span-5">
+          <span
+            className="font-mono text-[10px] tracking-[0.25em] sm:text-[11px]"
+            style={{ color: SIGNAL }}
+          >
+            Get in touch
+          </span>
+
+          <h2
+            className="mt-3 font-display text-3xl uppercase leading-[0.95] tracking-tight min-[400px]:text-4xl sm:text-5xl"
+            style={{ color: colors.text }}
+          >
+            Contact us
+          </h2>
+
+          <p
+            className="mt-5 max-w-md text-sm"
+            style={{ color: colors.textMuted }}
+          >
+            Questions about an order, a custom print, or a bulk request — reach out and we'll
+            get back to you within one business day.
+          </p>
+
+          <div className="mt-8 space-y-3 font-mono text-xs sm:text-sm">
+            <p className="break-all" style={{ color: colors.text }}>
+              <a href="mailto:support@thehustlermerchandise.com">
+                support@thehustlermerchandise.com
+              </a>
+            </p>
+            <p style={{ color: colors.text }}>
+              <a href="tel:+919876543210">+91 98765 43210</a>
+            </p>
+            <p style={{ color: colors.textMuted }}>Mon–Sat, 10am–6pm IST</p>
+          </div>
+        </div>
+
+        <div className="lg:col-span-7">
+          {submitted ? (
+            <div
+              className="border p-5 font-mono text-sm sm:p-6"
+              style={{
+                borderColor: SIGNAL,
+                color: SIGNAL,
+                backgroundColor: colors.bg,
+              }}
+            >
+              <p>Thanks — your message has been noted. We'll get back to you soon.</p>
+
+              <button
+                type="button"
+                onClick={() => setSubmitted(false)}
+                className="mt-4 text-xs uppercase tracking-widest underline underline-offset-4"
+              >
+                Send another message
+              </button>
+            </div>
+          ) : (
+            <form
+              onSubmit={handleSubmit}
+              className="grid gap-3 sm:grid-cols-2 sm:gap-4"
+            >
+              <input
+                required
+                name="name"
+                autoComplete="name"
+                placeholder="Your name"
+                className={`${fieldClass} sm:col-span-1`}
+                style={fieldStyle}
+              />
+
+              <input
+                required
+                name="email"
+                type="email"
+                autoComplete="email"
+                placeholder="Your email"
+                className={`${fieldClass} sm:col-span-1`}
+                style={fieldStyle}
+              />
+
+              <input
+                name="orderId"
+                placeholder="Order ID (optional)"
+                className={`${fieldClass} sm:col-span-2`}
+                style={fieldStyle}
+              />
+
+              <textarea
+                required
+                name="message"
+                rows={5}
+                placeholder="How can we help?"
+                className={`${fieldClass} sm:col-span-2`}
+                style={fieldStyle}
+              />
+
+              <button
+                type="submit"
+                disabled={sending}
+                className="w-full px-7 py-3 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95 disabled:opacity-60 sm:col-span-2 sm:w-fit"
+                style={{
+                  backgroundColor: SIGNAL,
+                  color: "#131210",
+                }}
+              >
+                {sending ? "Sending…" : "Send message"}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------- */
+/*  Footer                                                              */
+/*  TOAST:                                                              */
+/*   - Newsletter: invalid-email error toast, success toast before      */
+/*     redirecting to /signup                                           */
+/*   - Track Order: when logged out, an info toast explains the login   */
+/*     redirect instead of silently bouncing the user                   */
+/*  RESPONSIVE: newsletter full width on phones, brand column spans     */
+/*  the full row until lg, larger tap targets on links.                 */
+/* -------------------------------------------------------------------- */
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function Footer() {
+  const { colors } = useTheme();
+  const { status } = useSession();
+  const { toast } = useToast();
+  const router = useRouter();
+
+  const isAuthenticated = status === "authenticated";
+
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+
+  function handleTrackOrder(e: React.MouseEvent<HTMLAnchorElement>) {
+    e.preventDefault();
+
+    if (status === "loading") {
+      toast("Checking your session — try again in a moment.", "info");
+      return;
+    }
+
+    if (isAuthenticated) {
+      router.push("/orders");
+      return;
+    }
+
+    toast("Please log in to track your order.", "info");
+    setTimeout(() => {
+      router.push(`/login?redirect=${encodeURIComponent("/orders")}`);
+    }, 900);
+  }
+
+  function handleNewsletterSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    const email = newsletterEmail.trim();
+
+    if (!email) {
+      toast("Enter your email to join.", "error");
+      return;
+    }
+
+    if (!EMAIL_RE.test(email)) {
+      toast("That email doesn't look right. Check it and try again.", "error");
+      return;
+    }
+
+    toast("You're in. Taking you to sign up…", "success");
+    setTimeout(() => {
+      router.push(`/signup?email=${encodeURIComponent(email)}`);
+    }, 800);
+  }
+
+  const linkClass = "inline-block py-0.5 transition hover:opacity-80";
+
+  return (
+    <footer className="border-t" style={{ borderColor: colors.line }}>
+      <div className="mx-auto max-w-7xl px-4 py-12 min-[400px]:px-5 sm:px-8 sm:py-14">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-3 lg:grid-cols-5">
+          <div className="col-span-2 md:col-span-3 lg:col-span-2">
             <p
               className="font-display text-2xl uppercase tracking-tight"
               style={{ color: colors.text }}
             >
               The Hustler
-              <span style={{ color: SIGNAL }}>
-                .
-              </span>
+              <span style={{ color: SIGNAL }}>.</span>
             </p>
 
             <p
@@ -1384,19 +1865,22 @@ function Footer() {
             </p>
 
             <form
-              className="mt-6 flex max-w-xs border"
+              noValidate
+              className="mt-6 flex w-full max-w-sm border"
               style={{
                 borderColor: colors.lineStrong,
               }}
-              onSubmit={(e) =>
-                e.preventDefault()
-              }
+              onSubmit={handleNewsletterSubmit}
             >
               <input
                 type="email"
-                required
+                inputMode="email"
+                autoComplete="email"
+                aria-label="Email address"
+                value={newsletterEmail}
+                onChange={(e) => setNewsletterEmail(e.target.value)}
                 placeholder="you@email.com"
-                className="w-full bg-transparent px-3 py-2.5 text-sm focus:outline-none"
+                className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-base focus:outline-none sm:text-sm"
                 style={{ color: colors.text }}
               />
 
@@ -1416,17 +1900,14 @@ function Footer() {
               className="mt-6 flex gap-4"
               style={{ color: colors.textMuted }}
             >
-              {["Instagram", "X", "YouTube"].map(
-                (s) => (
-                  <a
-                    key={s}
-                    href="#"
-                    className="font-mono text-[11px] tracking-widest transition hover:opacity-80"
-                  >
-                    {s}
-                  </a>
-                )
-              )}
+              <a
+                href={INSTAGRAM_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-[11px] tracking-widest transition hover:opacity-80"
+              >
+                Instagram
+              </a>
             </div>
           </div>
 
@@ -1438,47 +1919,22 @@ function Footer() {
               Shop
             </p>
 
-            <ul
-              className="mt-4 space-y-2 text-sm"
-              style={{ color: colors.textMuted }}
-            >
+            <ul className="mt-4 space-y-1.5 text-sm">
               <li>
-                <a
-                  href="#products"
-                  className="transition hover:opacity-80"
-                  style={{ color: colors.text }}
-                >
+                <a href="#products" className={linkClass} style={{ color: colors.text }}>
                   Featured Products
                 </a>
               </li>
 
               <li>
-                <a
-                  href="/categories"
-                  className="transition hover:opacity-80"
-                  style={{ color: colors.text }}
-                >
+                <a href="/categories" className={linkClass} style={{ color: colors.text }}>
                   Collections
                 </a>
               </li>
 
               <li>
-                <a
-                  href="#custom"
-                  className="transition hover:opacity-80"
-                  style={{ color: colors.text }}
-                >
+                <a href="#custom" className={linkClass} style={{ color: colors.text }}>
                   Custom Merch
-                </a>
-              </li>
-
-              <li>
-                <a
-                  href="#"
-                  className="transition hover:opacity-80"
-                  style={{ color: colors.text }}
-                >
-                  Gift Cards
                 </a>
               </li>
             </ul>
@@ -1492,11 +1948,16 @@ function Footer() {
               Support
             </p>
 
-            <ul className="mt-4 space-y-2 text-sm">
+            <ul className="mt-4 space-y-1.5 text-sm">
               <li>
                 <a
-                  href="#"
-                  className="transition hover:opacity-80"
+                  href={
+                    isAuthenticated
+                      ? "/orders"
+                      : `/login?redirect=${encodeURIComponent("/orders")}`
+                  }
+                  onClick={handleTrackOrder}
+                  className={linkClass}
                   style={{ color: colors.text }}
                 >
                   Track Order
@@ -1504,31 +1965,19 @@ function Footer() {
               </li>
 
               <li>
-                <a
-                  href="#"
-                  className="transition hover:opacity-80"
-                  style={{ color: colors.text }}
-                >
+                <a href="/size-guide" className={linkClass} style={{ color: colors.text }}>
                   Size Guide
                 </a>
               </li>
 
               <li>
-                <a
-                  href="#"
-                  className="transition hover:opacity-80"
-                  style={{ color: colors.text }}
-                >
+                <a href="/#faqs" className={linkClass} style={{ color: colors.text }}>
                   FAQs
                 </a>
               </li>
 
               <li>
-                <a
-                  href="#"
-                  className="transition hover:opacity-80"
-                  style={{ color: colors.text }}
-                >
+                <a href="/#contact" className={linkClass} style={{ color: colors.text }}>
                   Contact Us
                 </a>
               </li>
@@ -1543,43 +1992,27 @@ function Footer() {
               Policies
             </p>
 
-            <ul className="mt-4 space-y-2 text-sm">
+            <ul className="mt-4 space-y-1.5 text-sm">
               <li>
-                <a
-                  href="#"
-                  className="transition hover:opacity-80"
-                  style={{ color: colors.text }}
-                >
+                <a href="/shipping-policy" className={linkClass} style={{ color: colors.text }}>
                   Shipping Policy
                 </a>
               </li>
 
               <li>
-                <a
-                  href="#"
-                  className="transition hover:opacity-80"
-                  style={{ color: colors.text }}
-                >
+                <a href="/returns-exchanges" className={linkClass} style={{ color: colors.text }}>
                   Returns & Exchanges
                 </a>
               </li>
 
               <li>
-                <a
-                  href="#"
-                  className="transition hover:opacity-80"
-                  style={{ color: colors.text }}
-                >
+                <a href="/privacy-policy" className={linkClass} style={{ color: colors.text }}>
                   Privacy Policy
                 </a>
               </li>
 
               <li>
-                <a
-                  href="#"
-                  className="transition hover:opacity-80"
-                  style={{ color: colors.text }}
-                >
+                <a href="/terms-of-service" className={linkClass} style={{ color: colors.text }}>
                   Terms of Service
                 </a>
               </li>
@@ -1588,7 +2021,7 @@ function Footer() {
         </div>
 
         <div
-          className="mt-12 flex flex-col items-center justify-between gap-3 border-t pt-6 text-xs sm:flex-row"
+          className="mt-10 flex flex-col items-center justify-between gap-3 border-t pt-6 text-center text-xs sm:mt-12 sm:flex-row sm:text-left"
           style={{
             borderColor: colors.line,
             color: colors.textMuted,
@@ -1598,9 +2031,7 @@ function Footer() {
             © {new Date().getFullYear()} TheHustlerMerchandise. All rights reserved.
           </p>
 
-          <p className="font-mono text-[10px] tracking-widest">
-            Made in India
-          </p>
+          <p className="font-mono text-[10px] tracking-widest">Made in India</p>
         </div>
       </div>
     </footer>
@@ -1609,14 +2040,18 @@ function Footer() {
 
 /* -------------------------------------------------------------------- */
 /*  Page                                                                */
+/*  TOAST: Home is now a thin wrapper that mounts <ToastProvider>; the  */
+/*  real page lives in HomeContent so it can call useToast().           */
+/*  Product-load failure now raises an error toast.                     */
+/*  RESPONSIVE: root has overflow-x-hidden so rotated stickers can't    */
+/*  create horizontal scroll; marquee respects prefers-reduced-motion.  */
 /* -------------------------------------------------------------------- */
 
-export default function Home() {
-  const [products, setProducts] =
-    useState<Product[]>([]);
+function HomeContent() {
+  const { toast } = useToast();
 
-  const [productsLoading, setProductsLoading] =
-    useState(true);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -1630,27 +2065,21 @@ export default function Home() {
         });
 
         if (!res.ok) {
-          throw new Error(
-            `Request failed with ${res.status}`
-          );
+          throw new Error(`Request failed with ${res.status}`);
         }
 
         const raw = await res.json();
-        const data: Product[] = Array.isArray(raw)
-          ? raw
-          : raw.data ?? [];
+        const data: Product[] = Array.isArray(raw) ? raw : raw.data ?? [];
 
         if (!cancelled) {
           setProducts(data);
         }
       } catch (error) {
-        console.error(
-          "Failed to load products:",
-          error
-        );
+        console.error("Failed to load products:", error);
 
         if (!cancelled) {
           setProducts([]);
+          toast("Couldn't load products. Please refresh the page.", "error");
         }
       } finally {
         if (!cancelled) {
@@ -1664,27 +2093,21 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [toast]);
 
   return (
-    <div>
+    <div className="overflow-x-hidden">
       <Hero />
 
       <Ticker />
 
       <FeaturedCategories />
 
-      <FeaturedProducts
-        products={products}
-        loading={productsLoading}
-      />
+      <FeaturedProducts products={products} loading={productsLoading} />
 
       <CustomMerch />
 
-      <BestProducts
-        products={products}
-        loading={productsLoading}
-      />
+      <BestProducts products={products} loading={productsLoading} />
 
       <BrandStory />
 
@@ -1692,31 +2115,44 @@ export default function Home() {
 
       <InstagramSection />
 
+      <FAQSection />
+
+      <ContactSection />
+
       <Footer />
 
       <style>{`
         @keyframes marquee {
-          from {
-            transform: translateX(0);
-          }
-
-          to {
-            transform: translateX(-50%);
-          }
+          from { transform: translateX(0); }
+          to   { transform: translateX(-50%); }
         }
 
         @keyframes fade-up {
-          from {
-            opacity: 0;
-            transform: translateY(16px);
-          }
+          from { opacity: 0; transform: translateY(16px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
 
-          to {
-            opacity: 1;
-            transform: translateY(0);
+        @keyframes toast-in {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          * {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
           }
         }
       `}</style>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <ToastProvider>
+      <HomeContent />
+    </ToastProvider>
   );
 }

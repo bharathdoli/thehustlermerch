@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from "react";
 import { SIGNAL, hexToRgba, useTheme } from "@/src/context/ThemeContext";
+import { useToast } from "@/src/context/ToastContext";
 
 /* -------------------------------------------------------------------- */
 /* Types                                                                */
@@ -133,9 +134,9 @@ function CategoryCard({ category }: { category: CategoryDTO }) {
                 }}
             />
 
-            <div className="absolute bottom-0 left-0 p-4">
+            <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
                 <p
-                    className="font-display text-xl uppercase tracking-tight"
+                    className="break-words font-display text-base uppercase tracking-tight sm:text-xl"
                     style={{ color: colors.text }}
                 >
                     {category.categoryName}
@@ -143,7 +144,7 @@ function CategoryCard({ category }: { category: CategoryDTO }) {
 
                 {category.categoryDescription && (
                     <p
-                        className="mt-1 max-w-[85%] font-mono text-[10px] leading-relaxed"
+                        className="mt-1 line-clamp-2 max-w-[90%] font-mono text-[10px] leading-relaxed"
                         style={{ color: colors.textMuted }}
                     >
                         {category.categoryDescription}
@@ -178,9 +179,13 @@ function CategoryCardSkeleton() {
 
 export default function CategoriesPage() {
     const { colors } = useTheme();
+    const toast = useToast();
 
     const [categories, setCategories] = useState<CategoryDTO[]>([]);
     const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+
+    // Bumped by the "Try again" button to re-run the fetch.
+    const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -203,10 +208,16 @@ export default function CategoriesPage() {
                 if (!cancelled) {
                     setCategories(normalized);
                     setStatus("success");
+
+                    // Only confirm after a manual retry, not on first load.
+                    if (reloadKey > 0) {
+                        toast.success("Categories loaded.");
+                    }
                 }
             } catch {
                 if (!cancelled) {
                     setStatus("error");
+                    toast.error("Couldn't load categories. Please try again.");
                 }
             }
         }
@@ -216,14 +227,19 @@ export default function CategoriesPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [reloadKey, toast]);
+
+    function handleRetry() {
+        toast.info("Retrying...");
+        setReloadKey((previous) => previous + 1);
+    }
 
     return (
         <div>
             <HazardRule />
 
-            <section className="mx-auto max-w-7xl px-5 py-14 sm:px-8 sm:py-20">
-                <div className="mb-10 border-b pb-6" style={{ borderColor: colors.line }}>
+            <section className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-8 sm:py-20">
+                <div className="mb-8 border-b pb-6 sm:mb-10" style={{ borderColor: colors.line }}>
                     <span
                         className="font-mono text-[11px] tracking-[0.25em]"
                         style={{ color: SIGNAL }}
@@ -232,7 +248,7 @@ export default function CategoriesPage() {
                     </span>
 
                     <h1
-                        className="mt-2 font-display text-4xl uppercase tracking-tight sm:text-5xl"
+                        className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-5xl"
                         style={{ color: colors.text }}
                     >
                         All Categories
@@ -245,7 +261,7 @@ export default function CategoriesPage() {
                 </div>
 
                 {status === "loading" && (
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
                         {Array.from({ length: 8 }).map((_, i) => (
                             <CategoryCardSkeleton key={i} />
                         ))}
@@ -254,21 +270,30 @@ export default function CategoriesPage() {
 
                 {status === "error" && (
                     <div
-                        className="border px-6 py-14 text-center"
+                        className="border px-4 py-10 text-center sm:px-6 sm:py-14"
                         style={{ borderColor: colors.line, backgroundColor: colors.panel }}
                     >
                         <p className="font-mono text-xs uppercase tracking-widest" style={{ color: SIGNAL }}>
                             Something went wrong
                         </p>
                         <p className="mt-2 text-sm" style={{ color: colors.textMuted }}>
-                            We couldn&apos;t load categories right now. Refresh the page to try again.
+                            We couldn&apos;t load categories right now. Please try again.
                         </p>
+
+                        <button
+                            type="button"
+                            onClick={handleRetry}
+                            className="mt-5 px-6 py-3 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95"
+                            style={{ backgroundColor: SIGNAL, color: "#131210" }}
+                        >
+                            Try again
+                        </button>
                     </div>
                 )}
 
                 {status === "success" && categories.length === 0 && (
                     <div
-                        className="border px-6 py-14 text-center"
+                        className="border px-4 py-10 text-center sm:px-6 sm:py-14"
                         style={{ borderColor: colors.line, backgroundColor: colors.panel }}
                     >
                         <p className="text-sm" style={{ color: colors.textMuted }}>
@@ -278,7 +303,7 @@ export default function CategoriesPage() {
                 )}
 
                 {status === "success" && categories.length > 0 && (
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
                         {categories.map((cat) => (
                             <CategoryCard key={cat.categoryId} category={cat} />
                         ))}

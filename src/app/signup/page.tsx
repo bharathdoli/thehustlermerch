@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
+import { useToast } from "@/src/context/ToastContext";
 
 const PENDING_CART_KEY = "hustler-pending-cart-item";
 const API_BASE_URL =
@@ -17,6 +18,7 @@ function SignupForm() {
   const redirectTo = searchParams.get("redirect") || "/";
 
   const { colors } = useTheme();
+  const toast = useToast();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -53,6 +55,7 @@ function SignupForm() {
         }
 
         sessionStorage.removeItem(PENDING_CART_KEY);
+        toast.success("Your saved items were added to the cart.");
 
         router.push("/cart");
         router.refresh();
@@ -60,6 +63,9 @@ function SignupForm() {
       }
     } catch (error) {
       console.error("Failed to restore pending cart:", error);
+      toast.error(
+        "We couldn't restore the item you were adding. Please add it again."
+      );
     }
 
     router.push(redirectTo);
@@ -70,8 +76,29 @@ function SignupForm() {
     e.preventDefault();
     setError("");
 
+    // Extra: required-field check (needed because the form uses noValidate)
+    if (!name.trim() || !email.trim() || !phoneNo.trim() || !password) {
+      setError("Please fill in all the fields.");
+      toast.error("Please fill in all the fields.");
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError("Passwords don't match.");
+      toast.error("Passwords don't match.");
+      return;
+    }
+
+    // Extra validation
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      toast.error("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (!/^\d{10}$/.test(phoneNo.trim())) {
+      setError("Enter a valid 10-digit phone number.");
+      toast.error("Enter a valid 10-digit phone number.");
       return;
     }
 
@@ -119,6 +146,13 @@ function SignupForm() {
           );
         }
 
+        toast.error(
+          (data.errors &&
+            data.errors[Object.keys(data.errors)[0]]?.[0]) ||
+            data.message ||
+            "Something went wrong."
+        );
+
         setLoading(false);
         return;
       }
@@ -127,9 +161,13 @@ function SignupForm() {
         "Could not reach the server. Please try again."
       );
 
+      toast.error("Could not reach the server. Please try again.");
+
       setLoading(false);
       return;
     }
+
+    toast.success("Account created successfully.");
 
     /*
      * Automatically log the newly created customer in.
@@ -144,6 +182,7 @@ function SignupForm() {
 
     if (result?.error) {
       setError("Account created. Please log in.");
+      toast.info("Account created. Please log in.");
 
       router.push(
         `/login?redirect=${encodeURIComponent(redirectTo)}`
@@ -151,6 +190,8 @@ function SignupForm() {
 
       return;
     }
+
+    toast.success("Welcome! You're now logged in.");
 
     completeRedirect();
   }
@@ -161,12 +202,15 @@ function SignupForm() {
         mx-auto
         flex
         min-h-[70vh]
+        w-full
         max-w-md
         flex-col
         justify-center
-        px-5
-        py-16
+        overflow-x-hidden
+        px-4
+        py-10
         sm:px-8
+        sm:py-16
       "
     >
       {/* Heading */}
@@ -181,9 +225,10 @@ function SignupForm() {
         className="
           mt-2
           font-display
-          text-4xl
+          text-3xl
           uppercase
           tracking-tight
+          sm:text-4xl
         "
         style={{ color: colors.text }}
       >
@@ -193,10 +238,12 @@ function SignupForm() {
       <form
         onSubmit={handleSubmit}
         className="mt-6 space-y-4"
+        noValidate
       >
         {/* Full Name */}
         <div>
           <label
+            htmlFor="signup-name"
             className="
               font-mono
               text-[11px]
@@ -209,6 +256,7 @@ function SignupForm() {
           </label>
 
           <input
+            id="signup-name"
             type="text"
             required
             value={name}
@@ -221,7 +269,8 @@ function SignupForm() {
               border
               px-4
               py-3
-              text-sm
+              text-base
+              sm:text-sm
               focus:outline-none
             "
             style={{
@@ -235,6 +284,7 @@ function SignupForm() {
         {/* Email */}
         <div>
           <label
+            htmlFor="signup-email"
             className="
               font-mono
               text-[11px]
@@ -247,6 +297,7 @@ function SignupForm() {
           </label>
 
           <input
+            id="signup-email"
             type="email"
             required
             value={email}
@@ -259,7 +310,8 @@ function SignupForm() {
               border
               px-4
               py-3
-              text-sm
+              text-base
+              sm:text-sm
               focus:outline-none
             "
             style={{
@@ -273,6 +325,7 @@ function SignupForm() {
         {/* Phone */}
         <div>
           <label
+            htmlFor="signup-phone"
             className="
               font-mono
               text-[11px]
@@ -285,6 +338,7 @@ function SignupForm() {
           </label>
 
           <input
+            id="signup-phone"
             type="tel"
             required
             value={phoneNo}
@@ -297,7 +351,8 @@ function SignupForm() {
               border
               px-4
               py-3
-              text-sm
+              text-base
+              sm:text-sm
               focus:outline-none
             "
             style={{
@@ -311,6 +366,7 @@ function SignupForm() {
         {/* Password */}
         <div>
           <label
+            htmlFor="signup-password"
             className="
               font-mono
               text-[11px]
@@ -323,6 +379,7 @@ function SignupForm() {
           </label>
 
           <input
+            id="signup-password"
             type="password"
             required
             value={password}
@@ -335,7 +392,8 @@ function SignupForm() {
               border
               px-4
               py-3
-              text-sm
+              text-base
+              sm:text-sm
               focus:outline-none
             "
             style={{
@@ -349,6 +407,7 @@ function SignupForm() {
         {/* Confirm Password */}
         <div>
           <label
+            htmlFor="signup-confirm-password"
             className="
               font-mono
               text-[11px]
@@ -361,6 +420,7 @@ function SignupForm() {
           </label>
 
           <input
+            id="signup-confirm-password"
             type="password"
             required
             value={confirmPassword}
@@ -375,7 +435,8 @@ function SignupForm() {
               border
               px-4
               py-3
-              text-sm
+              text-base
+              sm:text-sm
               focus:outline-none
             "
             style={{
@@ -403,6 +464,7 @@ function SignupForm() {
           className="
             w-full
             py-3
+            py-3.5
             font-mono
             text-xs
             font-bold
@@ -410,6 +472,7 @@ function SignupForm() {
             tracking-widest
             transition
             hover:brightness-95
+            disabled:cursor-not-allowed
             disabled:opacity-50
           "
           style={{

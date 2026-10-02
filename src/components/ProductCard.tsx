@@ -192,7 +192,11 @@ export default function ProductCard({
         </div>
 
         {visibleColours.length > 0 && (
-          <div className="mt-2.5 flex items-center gap-1.5">
+          <div
+            className="mt-2.5 flex items-center gap-1.5"
+            /* Let colour chips wrap on narrow cards instead of overflowing (added) */
+            style={{ flexWrap: "wrap" }}
+          >
             {visibleColours.map((colour) => (
               <span
                 key={colour.name}

@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useCart } from "@/src/context/CartContext";
 import { SIGNAL, useTheme, ThemeToggle } from "@/src/context/ThemeContext";
+import { useToast } from "@/src/context/ToastContext";
 
 const NAV_LINKS = [
   { label: "Home", href: "/" },
@@ -12,6 +14,7 @@ const NAV_LINKS = [
   { label: "Collections", href: "/#categories" },
   { label: "Custom Merch", href: "/#custom" },
   { label: "About", href: "/#story" },
+  { label: "FAQs", href: "/#faqs" },
 ];
 
 export default function Header() {
@@ -27,6 +30,24 @@ export default function Header() {
   const user = session?.user;
 
   const { colors } = useTheme();
+
+  /* Toasts, router and search state (added) */
+  const toast = useToast();
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const handleSearchSubmit = () => {
+    const q = searchQuery.trim();
+
+    if (!q) {
+      toast.info("Type something to search.");
+      return;
+    }
+
+    setSearchOpen(false);
+    setSearchQuery("");
+    router.push(`/products?search=${encodeURIComponent(q)}`);
+  };
 
   /* Prevent background scrolling when mobile menu is open */
   useEffect(() => {
@@ -77,6 +98,8 @@ export default function Header() {
          */
         backgroundColor: colors.bg,
         backgroundImage: "none",
+        /* Keep header clear of notches / status bars (added) */
+        paddingTop: "env(safe-area-inset-top, 0px)",
       }}
     >
       <ThemeToggle />
@@ -261,6 +284,8 @@ export default function Header() {
                     borderColor: colors.lineStrong,
                     backgroundColor: colors.bg,
                     backgroundImage: "none",
+                    /* Never wider than the viewport (added) */
+                    maxWidth: "calc(100vw - 2rem)",
                   }}
                 >
                   <div
@@ -314,6 +339,7 @@ export default function Header() {
                     type="button"
                     onClick={() => {
                       setAccountOpen(false);
+                      toast.info("Logging you out…");
                       signOut({ callbackUrl: "/" });
                     }}
                     className="
@@ -364,59 +390,67 @@ export default function Header() {
             </Link>
           )}
 
-          {/* Wishlist - desktop/tablet */}
-          <button
-            type="button"
-            aria-label="Wishlist"
-            className="
-              relative
-              hidden
-              transition-opacity
-              hover:opacity-80
-              sm:block
-            "
-            style={{
-              color: colors.text,
-              opacity: 0.85,
-            }}
-          >
-            <svg
-              width="19"
-              height="19"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              aria-hidden="true"
-            >
-              <path d="M12 20s-7-4.4-9.5-8.8C.8 7.8 2.4 4.5 5.8 4c2-.3 3.7.7 4.9 2.3C11.9 4.7 13.6 3.7 15.6 4c3.4.5 5 3.8 3.3 7.2C17.4 15.6 12 20 12 20z" />
-            </svg>
-
-            <span
+          {/*
+            Wishlist - desktop/tablet.
+            Only rendered when the user is logged in — a logged-out
+            visitor has no account to attach a wishlist to, so the
+            icon (and its badge) is hidden entirely rather than shown
+            in a disabled/empty state.
+          */}
+          {isAuthenticated && (
+            <button
+              type="button"
+              aria-label="Wishlist"
+              onClick={() => toast.info("Your wishlist is empty for now.")}
               className="
-                absolute
-                -right-2
-                -top-2
-                flex
-                h-4
-                w-4
-                items-center
-                justify-center
-                rounded-full
-                font-mono
-                text-[9px]
-                font-bold
+                relative
+                hidden
+                transition-opacity
+                hover:opacity-80
+                sm:block
               "
               style={{
-                backgroundColor: SIGNAL,
-                color: "#131210",
+                color: colors.text,
+                opacity: 0.85,
               }}
             >
-              0
-            </span>
-          </button>
+              <svg
+                width="19"
+                height="19"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
+                <path d="M12 20s-7-4.4-9.5-8.8C.8 7.8 2.4 4.5 5.8 4c2-.3 3.7.7 4.9 2.3C11.9 4.7 13.6 3.7 15.6 4c3.4.5 5 3.8 3.3 7.2C17.4 15.6 12 20 12 20z" />
+              </svg>
 
-          {/* Cart */}
+              <span
+                className="
+                  absolute
+                  -right-2
+                  -top-2
+                  flex
+                  h-4
+                  w-4
+                  items-center
+                  justify-center
+                  rounded-full
+                  font-mono
+                  text-[9px]
+                  font-bold
+                "
+                style={{
+                  backgroundColor: SIGNAL,
+                  color: "#131210",
+                }}
+              >
+                0
+              </span>
+            </button>
+          )}
+
           {/* Cart - visible only when logged in */}
           {isAuthenticated && (
             <Link
@@ -537,6 +571,17 @@ export default function Header() {
             <input
               autoFocus
               type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleSearchSubmit();
+                }
+
+                if (e.key === "Escape") {
+                  setSearchOpen(false);
+                }
+              }}
               placeholder="Search hoodies, tees, caps…"
               className="
                 w-full
@@ -606,6 +651,9 @@ export default function Header() {
             backgroundColor: colors.bg,
             backgroundImage: "none",
             borderLeft: `1px solid ${colors.line}`,
+            /* Scroll inside the drawer on short screens (added) */
+            overflowY: "auto",
+            paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
           }}
         >
           {/* Drawer Header */}
@@ -738,10 +786,33 @@ export default function Header() {
                     My Account
                   </Link>
 
+                  {/* Wishlist entry for mobile (added) - the header icon is hidden below sm */}
                   <button
                     type="button"
                     onClick={() => {
                       setMenuOpen(false);
+                      toast.info("Your wishlist is empty for now.");
+                    }}
+                    className="
+                      mt-4
+                      block
+                      font-mono
+                      text-xs
+                      uppercase
+                      tracking-widest
+                    "
+                    style={{
+                      color: colors.text,
+                    }}
+                  >
+                    Wishlist
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      toast.info("Logging you out…");
                       signOut({ callbackUrl: "/" });
                     }}
                     className="

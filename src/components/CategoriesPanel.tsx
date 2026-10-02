@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { useToast } from "@/src/context/ToastContext";
 
 type Category = {
   categoryId: string;
@@ -10,6 +11,7 @@ type Category = {
 };
 
 export default function CategoriesPanel() {
+  const toast = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -40,6 +42,7 @@ export default function CategoriesPanel() {
       setCategories(Array.isArray(data) ? data : data.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load categories.");
+      toast.error(err instanceof Error ? err.message : "Failed to load categories.");
     } finally {
       setLoading(false);
     }
@@ -72,8 +75,10 @@ export default function CategoriesPanel() {
       setDescription("");
       setImageUrl("");
       await fetchCategories();
+      toast.success("Category added.");
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to create category.");
+      toast.error(err instanceof Error ? err.message : "Failed to create category.");
     } finally {
       setCreating(false);
     }
@@ -88,6 +93,7 @@ export default function CategoriesPanel() {
 
   function cancelEdit() {
     setEditingId(null);
+    toast.info("Edit cancelled.");
   }
 
   async function saveEdit(categoryId: string) {
@@ -106,8 +112,10 @@ export default function CategoriesPanel() {
       if (!res.ok) throw new Error(data.message ?? "Failed to update category.");
       setEditingId(null);
       await fetchCategories();
+      toast.success("Category updated.");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to update category.");
+      // alert(err instanceof Error ? err.message : "Failed to update category.");
+      toast.error(err instanceof Error ? err.message : "Failed to update category.");
     } finally {
       setSavingEdit(false);
     }
@@ -123,18 +131,20 @@ export default function CategoriesPanel() {
         throw new Error(data.message ?? "Failed to delete category.");
       }
       await fetchCategories();
+      toast.success("Category deleted.");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete category.");
+      // alert(err instanceof Error ? err.message : "Failed to delete category.");
+      toast.error(err instanceof Error ? err.message : "Failed to delete category.");
     } finally {
       setDeletingId(null);
     }
   }
 
   return (
-    <div>
+    <div className="w-full min-w-0">
       {/* Create form */}
       <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3 border border-black/10 p-4">
-        <div className="flex-1 min-w-[180px]">
+        <div className="flex-1 min-w-[180px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Category name</label>
           <input
             required
@@ -144,7 +154,7 @@ export default function CategoriesPanel() {
             className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
           />
         </div>
-        <div className="flex-1 min-w-[220px]">
+        <div className="flex-1 min-w-[220px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Description (optional)</label>
           <input
             value={description}
@@ -153,7 +163,7 @@ export default function CategoriesPanel() {
             className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
           />
         </div>
-        <div className="flex-1 min-w-[220px]">
+        <div className="flex-1 min-w-[220px] max-w-full">
           <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Image URL (optional)</label>
           <input
             value={imageUrl}
@@ -165,7 +175,8 @@ export default function CategoriesPanel() {
         <button
           type="submit"
           disabled={creating}
-          className="px-5 py-2 font-mono text-xs font-bold uppercase tracking-widest bg-orange-500 text-black disabled:opacity-50"
+          className="px-5 py-2 font-mono text-xs font-bold uppercase tracking-widest bg-orange-500 text-black disabled:opacity-50
+            w-full min-h-[40px] sm:w-auto"
         >
           {creating ? "Adding..." : "Add Category"}
         </button>
@@ -178,7 +189,11 @@ export default function CategoriesPanel() {
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         {!loading && !error && (
-          <table className="w-full border-collapse text-sm">
+          <div className="w-full overflow-x-auto">
+          <table
+            className="w-full border-collapse text-sm
+              min-w-[640px]"
+          >
             <thead>
               <tr className="border-b border-black/10 text-left font-mono text-[10px] uppercase tracking-widest opacity-60">
                 <th className="py-2">Name</th>
@@ -214,15 +229,18 @@ export default function CategoriesPanel() {
                           className="w-full border border-black/20 px-2 py-1 text-sm focus:outline-none"
                         />
                       </td>
-                      <td className="py-2 text-right space-x-2">
+                      <td className="py-2 text-right space-x-2
+                        whitespace-nowrap">
                         <button
                           onClick={() => saveEdit(cat.categoryId)}
                           disabled={savingEdit}
-                          className="font-mono text-[10px] uppercase tracking-widest text-orange-600"
+                          className="font-mono text-[10px] uppercase tracking-widest text-orange-600
+                            min-h-[32px]"
                         >
                           Save
                         </button>
-                        <button onClick={cancelEdit} className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+                        <button onClick={cancelEdit} className="font-mono text-[10px] uppercase tracking-widest opacity-60
+                          min-h-[32px]">
                           Cancel
                         </button>
                       </td>
@@ -238,17 +256,20 @@ export default function CategoriesPanel() {
                           "—"
                         )}
                       </td>
-                      <td className="py-2 text-right space-x-3">
+                      <td className="py-2 text-right space-x-3
+                        whitespace-nowrap">
                         <button
                           onClick={() => startEdit(cat)}
-                          className="font-mono text-[10px] uppercase tracking-widest text-orange-600"
+                          className="font-mono text-[10px] uppercase tracking-widest text-orange-600
+                            min-h-[32px]"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(cat.categoryId)}
                           disabled={deletingId === cat.categoryId}
-                          className="font-mono text-[10px] uppercase tracking-widest text-red-600 disabled:opacity-50"
+                          className="font-mono text-[10px] uppercase tracking-widest text-red-600 disabled:opacity-50
+                            min-h-[32px]"
                         >
                           {deletingId === cat.categoryId ? "Deleting..." : "Delete"}
                         </button>
@@ -259,6 +280,7 @@ export default function CategoriesPanel() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
         {!loading && !error && categories.length === 0 && (

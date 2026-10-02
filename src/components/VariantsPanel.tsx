@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { useToast } from "@/src/context/ToastContext";
 
 type Product = { productId: string; productName: string };
 type Variant = {
@@ -13,6 +14,7 @@ type Variant = {
 };
 
 export default function VariantsPanel() {
+  const toast = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProductId, setSelectedProductId] = useState("");
   const [variants, setVariants] = useState<Variant[]>([]);
@@ -46,6 +48,7 @@ export default function VariantsPanel() {
         setProducts(Array.isArray(data) ? data : data.data ?? []);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load products.");
+        toast.error(err instanceof Error ? err.message : "Failed to load products.");
       } finally {
         setLoadingProducts(false);
       }
@@ -63,6 +66,7 @@ export default function VariantsPanel() {
       setVariants(Array.isArray(data) ? data : data.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load variants.");
+      toast.error(err instanceof Error ? err.message : "Failed to load variants.");
     } finally {
       setLoadingVariants(false);
     }
@@ -99,8 +103,10 @@ export default function VariantsPanel() {
       setPrice("");
       setStockQuantity("");
       await fetchVariants(selectedProductId);
+      toast.success("Variant added.");
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to create variant.");
+      toast.error(err instanceof Error ? err.message : "Failed to create variant.");
     } finally {
       setCreating(false);
     }
@@ -131,8 +137,10 @@ export default function VariantsPanel() {
       if (!res.ok) throw new Error(data.message ?? "Failed to update variant.");
       setEditingId(null);
       await fetchVariants(selectedProductId);
+      toast.success("Variant updated.");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to update variant.");
+      // alert(err instanceof Error ? err.message : "Failed to update variant.");
+      toast.error(err instanceof Error ? err.message : "Failed to update variant.");
     } finally {
       setSavingEdit(false);
     }
@@ -148,16 +156,18 @@ export default function VariantsPanel() {
         throw new Error(data.message ?? "Failed to delete variant.");
       }
       await fetchVariants(selectedProductId);
+      toast.success("Variant deleted.");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete variant.");
+      // alert(err instanceof Error ? err.message : "Failed to delete variant.");
+      toast.error(err instanceof Error ? err.message : "Failed to delete variant.");
     } finally {
       setDeletingId(null);
     }
   }
 
   return (
-    <div>
-      <div className="max-w-xs">
+    <div className="w-full min-w-0">
+      <div className="max-w-xs w-full">
         <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Select product</label>
         <select
           value={selectedProductId}
@@ -177,7 +187,7 @@ export default function VariantsPanel() {
       {selectedProductId && (
         <>
           <form onSubmit={handleCreate} className="mt-6 flex flex-wrap items-end gap-3 border border-black/10 p-4">
-            <div className="min-w-[120px]">
+            <div className="min-w-[120px] max-w-full">
               <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Colour</label>
               <input
                 value={colour}
@@ -186,7 +196,7 @@ export default function VariantsPanel() {
                 className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
               />
             </div>
-            <div className="min-w-[100px]">
+            <div className="min-w-[100px] max-w-full">
               <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Size</label>
               <input
                 value={size}
@@ -195,7 +205,7 @@ export default function VariantsPanel() {
                 className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
               />
             </div>
-            <div className="min-w-[100px]">
+            <div className="min-w-[100px] max-w-full">
               <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Price (₹)</label>
               <input
                 required
@@ -207,7 +217,7 @@ export default function VariantsPanel() {
                 className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
               />
             </div>
-            <div className="min-w-[100px]">
+            <div className="min-w-[100px] max-w-full">
               <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Stock</label>
               <input
                 required
@@ -221,7 +231,8 @@ export default function VariantsPanel() {
             <button
               type="submit"
               disabled={creating}
-              className="px-5 py-2 font-mono text-xs font-bold uppercase tracking-widest bg-orange-500 text-black disabled:opacity-50"
+              className="px-5 py-2 font-mono text-xs font-bold uppercase tracking-widest bg-orange-500 text-black disabled:opacity-50
+                w-full min-h-[40px] sm:w-auto"
             >
               {creating ? "Adding..." : "Add Variant"}
             </button>
@@ -233,7 +244,11 @@ export default function VariantsPanel() {
             {error && <p className="text-sm text-red-600">{error}</p>}
 
             {!loadingVariants && !error && (
-              <table className="w-full border-collapse text-sm">
+              <div className="w-full overflow-x-auto">
+              <table
+                className="w-full border-collapse text-sm
+                  min-w-[520px]"
+              >
                 <thead>
                   <tr className="border-b border-black/10 text-left font-mono text-[10px] uppercase tracking-widest opacity-60">
                     <th className="py-2">Colour</th>
@@ -278,15 +293,18 @@ export default function VariantsPanel() {
                               className="w-20 border border-black/20 px-2 py-1 text-sm focus:outline-none"
                             />
                           </td>
-                          <td className="py-2 text-right space-x-2">
+                          <td className="py-2 text-right space-x-2
+                            whitespace-nowrap">
                             <button
                               onClick={() => saveEdit(v.variantId)}
                               disabled={savingEdit}
-                              className="font-mono text-[10px] uppercase tracking-widest text-orange-600"
+                              className="font-mono text-[10px] uppercase tracking-widest text-orange-600
+                                min-h-[32px]"
                             >
                               Save
                             </button>
-                            <button onClick={() => setEditingId(null)} className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+                            <button onClick={() => { setEditingId(null); toast.info("Edit cancelled."); }} className="font-mono text-[10px] uppercase tracking-widest opacity-60
+                              min-h-[32px]">
                               Cancel
                             </button>
                           </td>
@@ -297,14 +315,17 @@ export default function VariantsPanel() {
                           <td className="py-2 pr-3">{v.size || "—"}</td>
                           <td className="py-2 pr-3">₹{v.price}</td>
                           <td className="py-2 pr-3">{v.stockQuantity}</td>
-                          <td className="py-2 text-right space-x-3">
-                            <button onClick={() => startEdit(v)} className="font-mono text-[10px] uppercase tracking-widest text-orange-600">
+                          <td className="py-2 text-right space-x-3
+                            whitespace-nowrap">
+                            <button onClick={() => startEdit(v)} className="font-mono text-[10px] uppercase tracking-widest text-orange-600
+                              min-h-[32px]">
                               Edit
                             </button>
                             <button
                               onClick={() => handleDelete(v.variantId)}
                               disabled={deletingId === v.variantId}
-                              className="font-mono text-[10px] uppercase tracking-widest text-red-600 disabled:opacity-50"
+                              className="font-mono text-[10px] uppercase tracking-widest text-red-600 disabled:opacity-50
+                                min-h-[32px]"
                             >
                               {deletingId === v.variantId ? "Deleting..." : "Delete"}
                             </button>
@@ -315,6 +336,7 @@ export default function VariantsPanel() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
 
             {!loadingVariants && !error && variants.length === 0 && (

@@ -5,6 +5,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/src/context/ThemeContext";
 import { CartProvider } from "@/src/context/CartContext";
 import { AuthProvider } from "@/src/context/AuthContext";
+import { ToastProvider } from "@/src/context/ToastContext";
 
 import SessionProviderWrapper from "@/src/components/SessionProviderWrapper";
 import Header from "@/src/components/Header";
@@ -37,11 +38,13 @@ export default function RootLayout({
         <SessionProviderWrapper>
           <AuthProvider>
             <ThemeProvider>
-              <CartProvider>
-                <AnnouncementBar />
-                <Header />
-                {children}
-              </CartProvider>
+              <ToastProvider>
+                <CartProvider>
+                  <AnnouncementBar />
+                  <Header />
+                  {children}
+                </CartProvider>
+              </ToastProvider>
             </ThemeProvider>
           </AuthProvider>
         </SessionProviderWrapper>

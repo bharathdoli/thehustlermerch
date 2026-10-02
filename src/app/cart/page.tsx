@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
+import { useToast } from "@/src/context/ToastContext";
 
 function fmt(n: number) {
   return `₹${n.toLocaleString("en-IN")}`;
@@ -37,6 +38,7 @@ export default function CartPage() {
   const { colors } = useTheme();
   const { status } = useSession();
   const router = useRouter();
+  const toast = useToast();
 
   const [cart, setCart] = useState<BackendCart>({
     cartId: null,
@@ -53,7 +55,7 @@ export default function CartPage() {
    * Reset the cart locally.
    * Used when the user is not authenticated.
    */
-  function resetCart() {
+  const resetCart = useCallback(() => {
     setCart({
       cartId: null,
       items: [],
@@ -61,12 +63,12 @@ export default function CartPage() {
     });
 
     setError(null);
-  }
+  }, []);
 
   /**
    * Load the logged-in user's cart.
    */
-  async function loadCart() {
+  const loadCart = useCallback(async () => {
     // Don't call the backend while authentication
     // status is still being determined.
     if (status === "loading") {
@@ -117,11 +119,13 @@ export default function CartPage() {
         err
       );
 
-      setError(
+      const message =
         err instanceof Error
           ? err.message
-          : "Failed to load cart."
-      );
+          : "Failed to load cart.";
+
+      setError(message);
+      toast.error(message);
 
       setCart({
         cartId: null,
@@ -131,7 +135,7 @@ export default function CartPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [status, resetCart, toast]);
 
   /**
    * Handle authentication changes.
@@ -140,7 +144,7 @@ export default function CartPage() {
    *   Load the user's cart.
    *
    * Logged out:
-   *   Clear cart state and redirect to login.
+   *   Clear cart state, show a message and redirect to login.
    */
   useEffect(() => {
     if (status === "loading") {
@@ -150,6 +154,8 @@ export default function CartPage() {
     if (status === "unauthenticated") {
       resetCart();
       setLoading(false);
+
+      toast.info("Please sign in to view your cart.");
 
       router.replace(
         "/login?redirect=/cart"
@@ -161,7 +167,7 @@ export default function CartPage() {
     if (status === "authenticated") {
       loadCart();
     }
-  }, [status, router]);
+  }, [status, router, toast, resetCart, loadCart]);
 
   /**
    * Remove a single cart item.
@@ -169,6 +175,8 @@ export default function CartPage() {
   async function removeFromCart(itemId: string) {
     // Extra frontend protection.
     if (status !== "authenticated") {
+      toast.info("Please sign in to manage your cart.");
+
       router.replace(
         "/login?redirect=/cart"
       );
@@ -199,6 +207,8 @@ export default function CartPage() {
         );
       }
 
+      toast.success("Item removed from your bag.");
+
       // Reload the real cart from the backend
       // after deletion.
       await loadCart();
@@ -208,11 +218,13 @@ export default function CartPage() {
         err
       );
 
-      setError(
+      const message =
         err instanceof Error
           ? err.message
-          : "Failed to remove item."
-      );
+          : "Failed to remove item.";
+
+      setError(message);
+      toast.error(message);
     } finally {
       setRemovingItemId(null);
     }
@@ -223,7 +235,7 @@ export default function CartPage() {
    */
   if (status === "loading") {
     return (
-      <div className="mx-auto max-w-3xl px-5 py-24 text-center sm:px-8">
+      <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center sm:px-8 sm:py-24">
         <span
           className="font-mono text-[11px] tracking-[0.25em]"
           style={{ color: SIGNAL }}
@@ -232,7 +244,7 @@ export default function CartPage() {
         </span>
 
         <h1
-          className="mt-2 font-display text-4xl uppercase tracking-tight"
+          className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-4xl"
           style={{ color: colors.text }}
         >
           Checking Login
@@ -263,7 +275,7 @@ export default function CartPage() {
    */
   if (loading) {
     return (
-      <div className="mx-auto max-w-3xl px-5 py-24 text-center sm:px-8">
+      <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center sm:px-8 sm:py-24">
         <span
           className="font-mono text-[11px] tracking-[0.25em]"
           style={{ color: SIGNAL }}
@@ -272,7 +284,7 @@ export default function CartPage() {
         </span>
 
         <h1
-          className="mt-2 font-display text-4xl uppercase tracking-tight"
+          className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-4xl"
           style={{ color: colors.text }}
         >
           Loading Cart
@@ -296,7 +308,7 @@ export default function CartPage() {
    */
   if (items.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-5 py-24 text-center sm:px-8">
+      <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center sm:px-8 sm:py-24">
         <span
           className="font-mono text-[11px] tracking-[0.25em]"
           style={{ color: SIGNAL }}
@@ -305,7 +317,7 @@ export default function CartPage() {
         </span>
 
         <h1
-          className="mt-2 font-display text-4xl uppercase tracking-tight"
+          className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-4xl"
           style={{ color: colors.text }}
         >
           Cart is empty
@@ -321,7 +333,7 @@ export default function CartPage() {
 
         {error && (
           <p
-            className="mt-4 font-mono text-xs"
+            className="mt-4 break-words font-mono text-xs"
             style={{ color: SIGNAL }}
           >
             {error}
@@ -343,7 +355,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
+    <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8 sm:py-16">
       <span
         className="font-mono text-[11px] tracking-[0.25em]"
         style={{ color: SIGNAL }}
@@ -352,7 +364,7 @@ export default function CartPage() {
       </span>
 
       <h1
-        className="mt-2 font-display text-4xl uppercase tracking-tight sm:text-5xl"
+        className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-5xl"
         style={{ color: colors.text }}
       >
         Cart
@@ -360,7 +372,7 @@ export default function CartPage() {
 
       {error && (
         <div
-          className="mt-5 border p-3 font-mono text-xs"
+          className="mt-5 break-words border p-3 font-mono text-xs"
           style={{
             borderColor: colors.line,
             color: SIGNAL,
@@ -370,7 +382,7 @@ export default function CartPage() {
         </div>
       )}
 
-      <div className="mt-10 grid gap-10 lg:grid-cols-12">
+      <div className="mt-8 grid gap-8 sm:mt-10 lg:grid-cols-12 lg:gap-10">
         {/* Items */}
         <div
           className="border lg:col-span-8"
@@ -408,7 +420,7 @@ export default function CartPage() {
             return (
               <div
                 key={item.itemId}
-                className="flex gap-4 p-4 sm:p-5"
+                className="flex gap-3 p-3 sm:gap-4 sm:p-5"
                 style={{
                   borderTop:
                     i === 0
@@ -417,12 +429,12 @@ export default function CartPage() {
                 }}
               >
                 {/* Images */}
-                <div className="flex shrink-0 gap-1.5">
+                <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
                   {frontImage && (
                     <img
                       src={frontImage}
                       alt="Front design"
-                      className="h-20 w-20 rounded object-cover"
+                      className="h-16 w-16 rounded object-cover sm:h-20 sm:w-20"
                     />
                   )}
 
@@ -430,7 +442,7 @@ export default function CartPage() {
                     <img
                       src={backImage}
                       alt="Back design"
-                      className="h-20 w-20 rounded object-cover"
+                      className="h-16 w-16 rounded object-cover sm:h-20 sm:w-20"
                     />
                   )}
 
@@ -440,7 +452,7 @@ export default function CartPage() {
                       <img
                         src={productImage}
                         alt={productName}
-                        className="h-20 w-20 rounded object-cover grayscale"
+                        className="h-16 w-16 rounded object-cover grayscale sm:h-20 sm:w-20"
                       />
                     )}
 
@@ -448,7 +460,7 @@ export default function CartPage() {
                     !backImage &&
                     !productImage && (
                       <div
-                        className="flex h-20 w-20 items-center justify-center"
+                        className="flex h-16 w-16 items-center justify-center sm:h-20 sm:w-20"
                         style={{
                           backgroundColor:
                             colors.panel,
@@ -470,11 +482,11 @@ export default function CartPage() {
                 </div>
 
                 {/* Details */}
-                <div className="flex-1">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3 sm:gap-4">
+                    <div className="min-w-0">
                       <p
-                        className="text-sm font-medium"
+                        className="break-words text-sm font-medium"
                         style={{
                           color: colors.text,
                         }}
@@ -511,8 +523,8 @@ export default function CartPage() {
                         removingItemId ===
                         item.itemId
                       }
-                      aria-label="Remove item"
-                      className="font-mono text-[10px] uppercase tracking-widest transition hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label={`Remove ${productName}`}
+                      className="shrink-0 py-1 font-mono text-[10px] uppercase tracking-widest transition hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
                       style={{
                         color:
                           colors.textMuted,
@@ -526,7 +538,7 @@ export default function CartPage() {
                     </button>
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between font-mono text-sm">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 font-mono text-xs sm:text-sm">
                     <span
                       style={{
                         color:
@@ -554,7 +566,7 @@ export default function CartPage() {
         {/* Summary */}
         <div className="lg:col-span-4">
           <div
-            className="border p-5"
+            className="border p-4 sm:p-5 lg:sticky lg:top-6"
             style={{
               borderColor: colors.line,
               backgroundColor: colors.panel,
@@ -600,6 +612,9 @@ export default function CartPage() {
 
             <Link
               href="/checkout"
+              onClick={() =>
+                toast.info("Taking you to checkout...")
+              }
               className="mt-5 block w-full py-3 text-center font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95"
               style={{
                 backgroundColor: SIGNAL,
@@ -611,7 +626,7 @@ export default function CartPage() {
 
             <Link
               href="/products"
-              className="mt-3 block text-center font-mono text-[11px] uppercase tracking-widest transition hover:opacity-100"
+              className="mt-3 block py-1 text-center font-mono text-[11px] uppercase tracking-widest transition hover:opacity-100"
               style={{
                 color: colors.textMuted,
                 opacity: 0.8,

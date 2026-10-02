@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ProductCard from "@/src/components/ProductCard";
 import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
+import { useToast } from "@/src/context/ToastContext";
 
 /* -------------------------------------------------------------------- */
 /* Types                                                                 */
@@ -112,6 +113,7 @@ function ProductCardSkeleton() {
 
 export default function ProductsPage() {
   const { colors } = useTheme();
+  const toast = useToast();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -154,6 +156,7 @@ export default function ProductsPage() {
       } catch {
         if (!cancelled) {
           setStatus("error");
+          toast.error("We couldn't load products. Please try again.");
         }
       }
     }
@@ -175,8 +178,44 @@ export default function ProductsPage() {
     );
   }, [products, activeCategoryId]);
 
+  // Toast feedback whenever a category tab is clicked (skips first render
+  // and anything that happens before the data has loaded).
+  const isFirstCategoryRender = useRef(true);
+
+  useEffect(() => {
+    if (isFirstCategoryRender.current) {
+      isFirstCategoryRender.current = false;
+      return;
+    }
+
+    if (status !== "success") return;
+
+    if (activeCategoryId === "all") {
+      toast.info(`Showing all products (${products.length})`);
+      return;
+    }
+
+    const name =
+      categories.find((c) => c.categoryId === activeCategoryId)
+        ?.categoryName ?? "this category";
+
+    if (filteredProducts.length === 0) {
+      toast.info(`No products in ${name} yet.`);
+    } else {
+      toast.info(
+        `Showing ${filteredProducts.length} ${
+          filteredProducts.length === 1 ? "product" : "products"
+        } in ${name}`
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategoryId]);
+
   return (
-    <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
+    <div
+      className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16
+        w-full min-w-0 md:px-10 lg:px-12 xl:py-20"
+    >
       <span
         className="font-mono text-[11px] tracking-[0.25em]"
         style={{ color: SIGNAL }}
@@ -185,13 +224,18 @@ export default function ProductsPage() {
       </span>
 
       <h1
-        className="mt-2 font-display text-4xl uppercase tracking-tight sm:text-5xl"
+        className="mt-2 font-display text-4xl uppercase tracking-tight sm:text-5xl
+          break-words max-[380px]:text-3xl lg:text-6xl"
         style={{ color: colors.text }}
       >
         All Products
       </h1>
 
-      <p className="mt-3 max-w-xl text-sm" style={{ color: colors.textMuted }}>
+      <p
+        className="mt-3 max-w-xl text-sm
+          sm:text-base"
+        style={{ color: colors.textMuted }}
+      >
         Pick a category to browse styles, or scroll everything below. Every
         product ships with your logo — upload it on the product page before
         you check out.
@@ -199,12 +243,14 @@ export default function ProductsPage() {
 
       {/* Category tabs */}
       <div
-        className="mt-8 flex flex-wrap gap-2 border-b pb-6"
+        className="mt-8 flex flex-wrap gap-2 border-b pb-6
+          sm:gap-3"
         style={{ borderColor: colors.line }}
       >
         <button
           onClick={() => setActiveCategoryId("all")}
-          className="border px-4 py-2 font-mono text-xs uppercase tracking-widest transition"
+          className="border px-4 py-2 font-mono text-xs uppercase tracking-widest transition
+            min-h-[40px] max-w-full break-words"
           style={
             activeCategoryId === "all"
               ? {
@@ -222,7 +268,8 @@ export default function ProductsPage() {
           <button
             key={category.categoryId}
             onClick={() => setActiveCategoryId(category.categoryId)}
-            className="border px-4 py-2 font-mono text-xs uppercase tracking-widest transition"
+            className="border px-4 py-2 font-mono text-xs uppercase tracking-widest transition
+              min-h-[40px] max-w-full break-words"
             style={
               activeCategoryId === category.categoryId
                 ? {
@@ -241,7 +288,10 @@ export default function ProductsPage() {
       {/* Loading */}
 
       {status === "loading" && (
-        <div className="mt-10 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
+        <div
+          className="mt-10 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4
+            md:gap-x-6 xl:grid-cols-5"
+        >
           {Array.from({ length: 8 }).map((_, i) => (
             <ProductCardSkeleton key={i} />
           ))}
@@ -252,7 +302,8 @@ export default function ProductsPage() {
 
       {status === "error" && (
         <div
-          className="mt-10 border px-6 py-14 text-center"
+          className="mt-10 border px-6 py-14 text-center
+            sm:px-10"
           style={{ borderColor: colors.line, backgroundColor: colors.panel }}
         >
           <p
@@ -265,6 +316,18 @@ export default function ProductsPage() {
             We couldn&apos;t load products right now. Refresh the page to try
             again.
           </p>
+
+          <button
+            onClick={() => {
+              toast.info("Reloading products…");
+              window.location.reload();
+            }}
+            className="mt-6 border px-5 py-2 font-mono text-xs uppercase tracking-widest transition
+              min-h-[40px]"
+            style={{ borderColor: SIGNAL, color: SIGNAL }}
+          >
+            Try again
+          </button>
         </div>
       )}
 
@@ -282,7 +345,10 @@ export default function ProductsPage() {
       {/* Grid */}
 
       {status === "success" && filteredProducts.length > 0 && (
-        <div className="mt-10 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
+        <div
+          className="mt-10 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4
+            md:gap-x-6 xl:grid-cols-5"
+        >
           {filteredProducts.map((product) => (
             <ProductCard key={product.productId} product={product} />
           ))}
