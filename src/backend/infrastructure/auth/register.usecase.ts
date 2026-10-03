@@ -45,7 +45,8 @@ export async function registerUser(input:RegisterInput){
       email: data.email,
       password: hashedPassword,
       phoneNo: data.phoneNo,
-      role: data.role,
+      // role: data.role,
+      role: "Customer"
     },
   });
   
