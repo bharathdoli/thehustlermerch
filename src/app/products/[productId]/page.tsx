@@ -15,11 +15,11 @@ export default async function ProductDetailPage({
 }) {
   const { productId } = await params;
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  // const baseUrl =
+  //   process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   const response = await fetch(
-    `${baseUrl}/api/products/${productId}`,
+    `$/api/products/${productId}`,
     {
       cache: "no-store",
     }

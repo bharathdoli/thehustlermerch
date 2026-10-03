@@ -27,9 +27,10 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+
 const SESSION_KEY = "hustler-session";
 const TOKEN_KEY = "hustler-token";
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+// const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -55,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function login(email: string, password: string): Promise<AuthResult> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/users/login`, {
+      const res = await fetch(`/api/users/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -82,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role: "Customer" | "Admin"
   ): Promise<AuthResult> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/users/register`, {
+      const res = await fetch(`/api/users/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

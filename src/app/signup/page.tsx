@@ -8,8 +8,8 @@ import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
 import { useToast } from "@/src/context/ToastContext";
 
 const PENDING_CART_KEY = "hustler-pending-cart-item";
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+// const API_BASE_URL =
+//   process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 function SignupForm() {
   const router = useRouter();
@@ -113,7 +113,7 @@ function SignupForm() {
      * as "Customer".
      */
     try {
-      const res = await fetch(`${API_BASE_URL}/api/users/register`, {
+      const res = await fetch(`/api/users/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
