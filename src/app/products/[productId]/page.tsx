@@ -9,7 +9,7 @@ import ProductDetail from "@/src/components/Productdetail";
  * IMPORTANT: a server-side fetch needs an absolute URL. Set
  * NEXT_PUBLIC_APP_URL in your environment (e.g. https://yourdomain.com).
  */
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const baseUrl = process.env.APP_URL || "http://localhost:3000";
 
 export default async function ProductDetailPage({
   params,
