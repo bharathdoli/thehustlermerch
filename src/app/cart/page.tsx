@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
+import { ORANGE, usePalette } from "@/src/lib/palette";
 import { useToast } from "@/src/context/ToastContext";
 
 function fmt(n: number) {
@@ -17,7 +17,6 @@ type BackendCartItem = {
   unitPrice: number | string;
   customizationLogoFront?: string | null;
   customizationLogoBack?: string | null;
-
   variant: {
     colour?: string | null;
     size?: string | null;
@@ -34,48 +33,28 @@ type BackendCart = {
   subtotal: number;
 };
 
+const EMPTY_CART: BackendCart = { cartId: null, items: [], subtotal: 0 };
+
 export default function CartPage() {
-  const { colors } = useTheme();
+  const colors = usePalette();
   const { status } = useSession();
   const router = useRouter();
   const toast = useToast();
 
-  const [cart, setCart] = useState<BackendCart>({
-    cartId: null,
-    items: [],
-    subtotal: 0,
-  });
-
+  const [cart, setCart] = useState<BackendCart>(EMPTY_CART);
   const [loading, setLoading] = useState(true);
-  const [removingItemId, setRemovingItemId] =
-    useState<string | null>(null);
+  const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  /**
-   * Reset the cart locally.
-   * Used when the user is not authenticated.
-   */
   const resetCart = useCallback(() => {
-    setCart({
-      cartId: null,
-      items: [],
-      subtotal: 0,
-    });
-
+    setCart(EMPTY_CART);
     setError(null);
   }, []);
 
-  /**
-   * Load the logged-in user's cart.
-   */
+  /** Load the logged-in user's cart. */
   const loadCart = useCallback(async () => {
-    // Don't call the backend while authentication
-    // status is still being determined.
-    if (status === "loading") {
-      return;
-    }
+    if (status === "loading") return;
 
-    // Never call the protected cart API when logged out.
     if (status !== "authenticated") {
       resetCart();
       setLoading(false);
@@ -92,75 +71,37 @@ export default function CartPage() {
         credentials: "include",
       });
 
-      const data = await response
-        .json()
-        .catch(() => null);
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(
-          data?.message ||
-            data?.error ||
-            "Failed to load cart."
-        );
+        throw new Error(data?.message || data?.error || "Failed to load cart.");
       }
 
       setCart({
         cartId: data?.cartId ?? null,
-
-        items: Array.isArray(data?.items)
-          ? data.items
-          : [],
-
+        items: Array.isArray(data?.items) ? data.items : [],
         subtotal: Number(data?.subtotal ?? 0),
       });
     } catch (err) {
-      console.error(
-        "Failed to load cart:",
-        err
-      );
-
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Failed to load cart.";
-
+      console.error("Failed to load cart:", err);
+      const message = err instanceof Error ? err.message : "Failed to load cart.";
       setError(message);
       toast.error(message);
-
-      setCart({
-        cartId: null,
-        items: [],
-        subtotal: 0,
-      });
+      setCart(EMPTY_CART);
     } finally {
       setLoading(false);
     }
   }, [status, resetCart, toast]);
 
-  /**
-   * Handle authentication changes.
-   *
-   * Logged in:
-   *   Load the user's cart.
-   *
-   * Logged out:
-   *   Clear cart state, show a message and redirect to login.
-   */
+  /** React to authentication changes. */
   useEffect(() => {
-    if (status === "loading") {
-      return;
-    }
+    if (status === "loading") return;
 
     if (status === "unauthenticated") {
       resetCart();
       setLoading(false);
-
       toast.info("Please sign in to view your cart.");
-
-      router.replace(
-        "/login?redirect=/cart"
-      );
-
+      router.replace("/login?redirect=/cart");
       return;
     }
 
@@ -169,17 +110,11 @@ export default function CartPage() {
     }
   }, [status, router, toast, resetCart, loadCart]);
 
-  /**
-   * Remove a single cart item.
-   */
+  /** Remove a single cart item. */
   async function removeFromCart(itemId: string) {
-    // Extra frontend protection.
     if (status !== "authenticated") {
       toast.info("Please sign in to manage your cart.");
-
-      router.replace(
-        "/login?redirect=/cart"
-      );
+      router.replace("/login?redirect=/cart");
       return;
     }
 
@@ -187,42 +122,22 @@ export default function CartPage() {
       setRemovingItemId(itemId);
       setError(null);
 
-      const response = await fetch(
-        `/api/cart/items/${itemId}`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        }
-      );
+      const response = await fetch(`/api/cart/items/${itemId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
 
-      const data = await response
-        .json()
-        .catch(() => null);
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(
-          data?.message ||
-            data?.error ||
-            "Failed to remove item."
-        );
+        throw new Error(data?.message || data?.error || "Failed to remove item.");
       }
 
       toast.success("Item removed from your bag.");
-
-      // Reload the real cart from the backend
-      // after deletion.
       await loadCart();
     } catch (err) {
-      console.error(
-        "Failed to remove cart item:",
-        err
-      );
-
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Failed to remove item.";
-
+      console.error("Failed to remove cart item:", err);
+      const message = err instanceof Error ? err.message : "Failed to remove item.";
       setError(message);
       toast.error(message);
     } finally {
@@ -230,72 +145,54 @@ export default function CartPage() {
     }
   }
 
-  /**
-   * Authentication status is still being checked.
-   */
+  /* ---------- shared styles (same look as the account page) ---------- */
+  const pageBg = { backgroundColor: colors.bg, color: colors.text };
+  const eyebrowClass = "text-[11px] font-medium uppercase tracking-[0.25em]";
+  const h1Class =
+    "mt-1.5 font-display text-4xl font-black uppercase leading-[0.95] tracking-[-0.03em] sm:text-6xl";
+  const primaryBtnClass =
+    "block w-full px-8 py-4 text-center text-xs font-semibold uppercase tracking-[0.2em] transition hover:opacity-80";
+  const primaryBtnStyle = { backgroundColor: colors.text, color: colors.bg };
+
+  /* ---------- auth still being checked ---------- */
   if (status === "loading") {
     return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center sm:px-8 sm:py-24">
-        <span
-          className="font-mono text-[11px] tracking-[0.25em]"
-          style={{ color: SIGNAL }}
-        >
-          YOUR BAG
-        </span>
-
-        <h1
-          className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-4xl"
-          style={{ color: colors.text }}
-        >
-          Checking Login
-        </h1>
-
-        <p
-          className="mt-3 text-sm"
-          style={{ color: colors.textMuted }}
-        >
-          Please wait...
-        </p>
+      <div style={pageBg} className="min-h-[70vh]">
+        <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center sm:px-8 sm:py-24">
+          <span className={eyebrowClass} style={{ color: ORANGE }}>
+            Your bag
+          </span>
+          <h1 className={h1Class} style={{ color: colors.text }}>
+            Checking login
+          </h1>
+          <p className="mt-3 text-sm" style={{ color: colors.textMuted }}>
+            Please wait...
+          </p>
+        </div>
       </div>
     );
   }
 
-  /**
-   * User is logged out.
-   *
-   * The useEffect above will redirect to login.
-   * Render nothing while the redirect happens.
-   */
+  /* ---------- logged out: effect above redirects ---------- */
   if (status === "unauthenticated") {
     return null;
   }
 
-  /**
-   * Authenticated user - cart is loading.
-   */
+  /* ---------- cart loading ---------- */
   if (loading) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center sm:px-8 sm:py-24">
-        <span
-          className="font-mono text-[11px] tracking-[0.25em]"
-          style={{ color: SIGNAL }}
-        >
-          Your Bag
-        </span>
-
-        <h1
-          className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-4xl"
-          style={{ color: colors.text }}
-        >
-          Loading Cart
-        </h1>
-
-        <p
-          className="mt-3 text-sm"
-          style={{ color: colors.textMuted }}
-        >
-          Fetching your cart...
-        </p>
+      <div style={pageBg} className="min-h-[70vh]">
+        <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center sm:px-8 sm:py-24">
+          <span className={eyebrowClass} style={{ color: ORANGE }}>
+            Your bag
+          </span>
+          <h1 className={h1Class} style={{ color: colors.text }}>
+            Loading cart
+          </h1>
+          <p className="mt-3 text-sm" style={{ color: colors.textMuted }}>
+            Fetching your cart...
+          </p>
+        </div>
       </div>
     );
   }
@@ -303,337 +200,213 @@ export default function CartPage() {
   const items = cart.items;
   const cartTotal = Number(cart.subtotal);
 
-  /**
-   * Cart is empty.
-   */
+  /* ---------- empty cart ---------- */
   if (items.length === 0) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center sm:px-8 sm:py-24">
-        <span
-          className="font-mono text-[11px] tracking-[0.25em]"
-          style={{ color: SIGNAL }}
-        >
-          Your Bag
-        </span>
-
-        <h1
-          className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-4xl"
-          style={{ color: colors.text }}
-        >
-          Cart is empty
-        </h1>
-
-        <p
-          className="mt-3 text-sm"
-          style={{ color: colors.textMuted }}
-        >
-          Nothing here yet — go pick a design and upload your
-          logo to get started.
-        </p>
-
-        {error && (
-          <p
-            className="mt-4 break-words font-mono text-xs"
-            style={{ color: SIGNAL }}
-          >
-            {error}
+      <div style={pageBg} className="min-h-[70vh]">
+        <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center sm:px-8 sm:py-24">
+          <span className={eyebrowClass} style={{ color: ORANGE }}>
+            Your bag
+          </span>
+          <h1 className={h1Class} style={{ color: colors.text }}>
+            Cart is empty
+          </h1>
+          <p className="mt-3 text-sm" style={{ color: colors.textMuted }}>
+            Nothing here yet — go pick a design and upload your logo to get started.
           </p>
-        )}
 
-        <Link
-          href="/products"
-          className="mt-8 inline-block px-7 py-3 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95"
-          style={{
-            backgroundColor: SIGNAL,
-            color: "#131210",
-          }}
-        >
-          Browse Products
-        </Link>
+          {error && (
+            <p className="mt-4 break-words text-xs" style={{ color: ORANGE }}>
+              {error}
+            </p>
+          )}
+
+          <Link
+            href="/products"
+            className="mt-8 inline-block px-8 py-4 text-xs font-semibold uppercase tracking-[0.2em] transition hover:opacity-80"
+            style={primaryBtnStyle}
+          >
+            Browse products
+          </Link>
+        </div>
       </div>
     );
   }
 
+  /* ---------- cart with items ---------- */
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8 sm:py-16">
-      <span
-        className="font-mono text-[11px] tracking-[0.25em]"
-        style={{ color: SIGNAL }}
-      >
-        Your Bag
-      </span>
+    <div style={pageBg} className="min-h-[70vh]">
+      <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8 sm:py-16">
+        <span className={eyebrowClass} style={{ color: ORANGE }}>
+          Your bag
+        </span>
+        <h1 className={h1Class} style={{ color: colors.text }}>
+          Cart
+        </h1>
 
-      <h1
-        className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-5xl"
-        style={{ color: colors.text }}
-      >
-        Cart
-      </h1>
+        {error && (
+          <div
+            className="mt-5 break-words border p-3 text-xs"
+            style={{ borderColor: colors.line, color: ORANGE }}
+          >
+            {error}
+          </div>
+        )}
 
-      {error && (
-        <div
-          className="mt-5 break-words border p-3 font-mono text-xs"
-          style={{
-            borderColor: colors.line,
-            color: SIGNAL,
-          }}
-        >
-          {error}
-        </div>
-      )}
+        <div className="mt-8 grid gap-8 sm:mt-10 lg:grid-cols-12 lg:gap-10">
+          {/* Items */}
+          <div className="border lg:col-span-8" style={{ borderColor: colors.line }}>
+            {items.map((item, i) => {
+              const product = item.variant?.product;
+              const productName = product?.productName ?? "Product";
+              const productImage = product?.productImage ?? "";
+              const colour = item.variant?.colour ?? "N/A";
+              const size = item.variant?.size ?? "One Size";
+              const quantity = Number(item.quantity);
+              const unitPrice = Number(item.unitPrice);
+              const totalPrice = quantity * unitPrice;
+              const frontImage = item.customizationLogoFront;
+              const backImage = item.customizationLogoBack;
+              const removing = removingItemId === item.itemId;
 
-      <div className="mt-8 grid gap-8 sm:mt-10 lg:grid-cols-12 lg:gap-10">
-        {/* Items */}
-        <div
-          className="border lg:col-span-8"
-          style={{ borderColor: colors.line }}
-        >
-          {items.map((item, i) => {
-            const product = item.variant?.product;
-
-            const productName =
-              product?.productName ?? "Product";
-
-            const productImage =
-              product?.productImage ?? "";
-
-            const colour =
-              item.variant?.colour ?? "N/A";
-
-            const size =
-              item.variant?.size ?? "One Size";
-
-            const quantity = Number(item.quantity);
-
-            const unitPrice =
-              Number(item.unitPrice);
-
-            const totalPrice =
-              quantity * unitPrice;
-
-            const frontImage =
-              item.customizationLogoFront;
-
-            const backImage =
-              item.customizationLogoBack;
-
-            return (
-              <div
-                key={item.itemId}
-                className="flex gap-3 p-3 sm:gap-4 sm:p-5"
-                style={{
-                  borderTop:
-                    i === 0
-                      ? "none"
-                      : `1px solid ${colors.line}`,
-                }}
-              >
-                {/* Images */}
-                <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
-                  {frontImage && (
-                    <img
-                      src={frontImage}
-                      alt="Front design"
-                      className="h-16 w-16 rounded object-cover sm:h-20 sm:w-20"
-                    />
-                  )}
-
-                  {backImage && (
-                    <img
-                      src={backImage}
-                      alt="Back design"
-                      className="h-16 w-16 rounded object-cover sm:h-20 sm:w-20"
-                    />
-                  )}
-
-                  {!frontImage &&
-                    !backImage &&
-                    productImage && (
+              return (
+                <div
+                  key={item.itemId}
+                  className="flex gap-3 p-3 sm:gap-4 sm:p-5"
+                  style={{
+                    borderTop: i === 0 ? "none" : `1px solid ${colors.line}`,
+                  }}
+                >
+                  {/* Images */}
+                  <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
+                    {frontImage && (
                       <img
-                        src={productImage}
-                        alt={productName}
-                        className="h-16 w-16 rounded object-cover grayscale sm:h-20 sm:w-20"
+                        src={frontImage}
+                        alt="Front design"
+                        className="h-16 w-16 object-cover sm:h-20 sm:w-20"
+                        style={{ backgroundColor: colors.panel }}
                       />
                     )}
 
-                  {!frontImage &&
-                    !backImage &&
-                    !productImage && (
+                    {backImage && (
+                      <img
+                        src={backImage}
+                        alt="Back design"
+                        className="h-16 w-16 object-cover sm:h-20 sm:w-20"
+                        style={{ backgroundColor: colors.panel }}
+                      />
+                    )}
+
+                    {!frontImage && !backImage && productImage && (
+                      <img
+                        src={productImage}
+                        alt={productName}
+                        className="h-16 w-16 object-cover sm:h-20 sm:w-20"
+                        style={{ backgroundColor: colors.panel }}
+                      />
+                    )}
+
+                    {!frontImage && !backImage && !productImage && (
                       <div
                         className="flex h-16 w-16 items-center justify-center sm:h-20 sm:w-20"
-                        style={{
-                          backgroundColor:
-                            colors.panel,
-                        }}
+                        style={{ backgroundColor: colors.panel }}
                       >
                         <span
-                          className="text-center font-mono text-[8px]"
-                          style={{
-                            color:
-                              colors.textMuted,
-                          }}
+                          className="text-center text-[8px] uppercase tracking-wider"
+                          style={{ color: colors.textMuted }}
                         >
-                          IMAGE
+                          Image
                           <br />
-                          UNAVAILABLE
+                          unavailable
                         </span>
                       </div>
                     )}
-                </div>
+                  </div>
 
-                {/* Details */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-3 sm:gap-4">
-                    <div className="min-w-0">
-                      <p
-                        className="break-words text-sm font-medium"
-                        style={{
-                          color: colors.text,
-                        }}
-                      >
-                        {productName}
-                      </p>
+                  {/* Details */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3 sm:gap-4">
+                      <div className="min-w-0">
+                        <p
+                          className="break-words text-sm font-medium"
+                          style={{ color: colors.text }}
+                        >
+                          {productName}
+                        </p>
+                        <p className="mt-1 text-xs" style={{ color: colors.textMuted }}>
+                          Colour: {colour}
+                        </p>
+                        <p className="mt-0.5 text-xs" style={{ color: colors.textMuted }}>
+                          {size} × {quantity}
+                        </p>
+                      </div>
 
-                      <p
-                        className="mt-1 font-mono text-[11px]"
-                        style={{
-                          color:
-                            colors.textMuted,
-                        }}
+                      <button
+                        onClick={() => removeFromCart(item.itemId)}
+                        disabled={removing}
+                        aria-label={`Remove ${productName}`}
+                        className="shrink-0 py-1 text-[11px] font-medium uppercase tracking-[0.2em] transition hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        style={{ color: colors.textMuted, opacity: 0.8 }}
                       >
-                        Colour: {colour}
-                      </p>
-
-                      <p
-                        className="mt-0.5 font-mono text-[11px]"
-                        style={{
-                          color:
-                            colors.textMuted,
-                        }}
-                      >
-                        {size} × {quantity}
-                      </p>
+                        {removing ? "Removing..." : "Remove"}
+                      </button>
                     </div>
 
-                    <button
-                      onClick={() =>
-                        removeFromCart(item.itemId)
-                      }
-                      disabled={
-                        removingItemId ===
-                        item.itemId
-                      }
-                      aria-label={`Remove ${productName}`}
-                      className="shrink-0 py-1 font-mono text-[10px] uppercase tracking-widest transition hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
-                      style={{
-                        color:
-                          colors.textMuted,
-                        opacity: 0.7,
-                      }}
-                    >
-                      {removingItemId ===
-                      item.itemId
-                        ? "Removing..."
-                        : "Remove"}
-                    </button>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 font-mono text-xs sm:text-sm">
-                    <span
-                      style={{
-                        color:
-                          colors.textMuted,
-                      }}
-                    >
-                      {quantity} pcs ×{" "}
-                      {fmt(unitPrice)}
-                    </span>
-
-                    <span
-                      style={{
-                        color: SIGNAL,
-                      }}
-                    >
-                      {fmt(totalPrice)}
-                    </span>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs sm:text-sm">
+                      <span style={{ color: colors.textMuted }}>
+                        {quantity} pcs × {fmt(unitPrice)}
+                      </span>
+                      <span className="font-semibold" style={{ color: ORANGE }}>
+                        {fmt(totalPrice)}
+                      </span>
+                    </div>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+
+          {/* Summary */}
+          <div className="lg:col-span-4">
+            <div
+              className="p-5 sm:p-6 lg:sticky lg:top-6"
+              style={{ backgroundColor: colors.panel }}
+            >
+              <h2
+                className="text-[11px] font-medium uppercase tracking-[0.2em]"
+                style={{ color: colors.textMuted }}
+              >
+                Order summary
+              </h2>
+
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <span style={{ color: colors.textMuted }}>Subtotal</span>
+                <span className="font-semibold" style={{ color: colors.text }}>
+                  {fmt(cartTotal)}
+                </span>
               </div>
-            );
-          })}
-        </div>
 
-        {/* Summary */}
-        <div className="lg:col-span-4">
-          <div
-            className="border p-4 sm:p-5 lg:sticky lg:top-6"
-            style={{
-              borderColor: colors.line,
-              backgroundColor: colors.panel,
-            }}
-          >
-            <h2
-              className="font-mono text-[11px] uppercase tracking-widest"
-              style={{
-                color: colors.textMuted,
-              }}
-            >
-              Order Summary
-            </h2>
+              <p className="mt-1 text-[11px]" style={{ color: colors.textMuted }}>
+                Shipping &amp; taxes calculated at checkout.
+              </p>
 
-            <div className="mt-4 flex items-center justify-between font-mono text-sm">
-              <span
-                style={{
-                  color: colors.textMuted,
-                }}
+              <Link
+                href="/checkout"
+                onClick={() => toast.info("Taking you to checkout...")}
+                className={`${primaryBtnClass} mt-5`}
+                style={primaryBtnStyle}
               >
-                Subtotal
-              </span>
+                Proceed to checkout
+              </Link>
 
-              <span
-                style={{
-                  color: colors.text,
-                }}
+              <Link
+                href="/products"
+                className="mt-3 block py-1 text-center text-[11px] font-medium uppercase tracking-[0.2em] transition hover:opacity-100"
+                style={{ color: colors.textMuted, opacity: 0.9 }}
               >
-                {fmt(cartTotal)}
-              </span>
+                Continue shopping
+              </Link>
             </div>
-
-            <p
-              className="mt-1 font-mono text-[10px]"
-              style={{
-                color: colors.textMuted,
-                opacity: 0.7,
-              }}
-            >
-              Shipping & taxes calculated at
-              checkout.
-            </p>
-
-            <Link
-              href="/checkout"
-              onClick={() =>
-                toast.info("Taking you to checkout...")
-              }
-              className="mt-5 block w-full py-3 text-center font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95"
-              style={{
-                backgroundColor: SIGNAL,
-                color: "#131210",
-              }}
-            >
-              Proceed to Checkout
-            </Link>
-
-            <Link
-              href="/products"
-              className="mt-3 block py-1 text-center font-mono text-[11px] uppercase tracking-widest transition hover:opacity-100"
-              style={{
-                color: colors.textMuted,
-                opacity: 0.8,
-              }}
-            >
-              Continue shopping
-            </Link>
           </div>
         </div>
       </div>

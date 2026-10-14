@@ -2,6 +2,22 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useToast } from "@/src/context/ToastContext";
+import {
+  ORANGE,
+  colors,
+  Field,
+  adminFormClass,
+  adminFormStyle,
+  adminInputClass,
+  adminInputStyle,
+  adminPrimaryBtnClass,
+  adminPrimaryBtnStyle,
+  adminRowBtnClass,
+  adminThClass,
+  adminThStyle,
+  adminHeadRowStyle,
+  adminRowStyle,
+} from "@/src/components/AdminUi";
 
 type Coupon = {
   couponId: string;
@@ -103,7 +119,6 @@ export default function CouponsPanel() {
       await fetchCoupons();
       toast.success(`Coupon ${coupon.code} ${coupon.isActive ? "deactivated" : "activated"}.`);
     } catch (err) {
-      // alert(err instanceof Error ? err.message : "Failed to update coupon.");
       toast.error(err instanceof Error ? err.message : "Failed to update coupon.");
     } finally {
       setTogglingId(null);
@@ -122,7 +137,6 @@ export default function CouponsPanel() {
       await fetchCoupons();
       toast.success("Coupon deleted.");
     } catch (err) {
-      // alert(err instanceof Error ? err.message : "Failed to delete coupon.");
       toast.error(err instanceof Error ? err.message : "Failed to delete coupon.");
     } finally {
       setDeletingId(null);
@@ -131,30 +145,29 @@ export default function CouponsPanel() {
 
   return (
     <div className="w-full min-w-0">
-      <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3 border border-black/10 p-4">
-        <div className="min-w-[140px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Code</label>
+      <form onSubmit={handleCreate} className={adminFormClass} style={adminFormStyle}>
+        <Field label="Code" className="min-w-[140px]">
           <input
             required
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder="e.g. SAVE20"
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           />
-        </div>
-        <div className="min-w-[120px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Type</label>
+        </Field>
+        <Field label="Type" className="min-w-[120px]">
           <select
             value={type}
             onChange={(e) => setType(e.target.value as "Flat" | "Percentage")}
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           >
             <option value="Flat">Flat (₹)</option>
             <option value="Percentage">Percentage (%)</option>
           </select>
-        </div>
-        <div className="min-w-[100px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Value</label>
+        </Field>
+        <Field label="Value" className="min-w-[100px]">
           <input
             required
             type="number"
@@ -162,33 +175,33 @@ export default function CouponsPanel() {
             max={type === "Percentage" ? 100 : undefined}
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           />
-        </div>
-        <div className="min-w-[120px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Min order (optional)</label>
+        </Field>
+        <Field label="Min order (optional)" className="min-w-[120px]">
           <input
             type="number"
             min="0"
             value={minOrderAmount}
             onChange={(e) => setMinOrderAmount(e.target.value)}
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           />
-        </div>
+        </Field>
         {type === "Percentage" && (
-          <div className="min-w-[130px] max-w-full">
-            <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Max discount (optional)</label>
+          <Field label="Max discount (optional)" className="min-w-[130px]">
             <input
               type="number"
               min="0"
               value={maxDiscountAmount}
               onChange={(e) => setMaxDiscountAmount(e.target.value)}
-              className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+              className={adminInputClass}
+              style={adminInputStyle}
             />
-          </div>
+          </Field>
         )}
-        <div className="min-w-[130px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Usage limit (optional)</label>
+        <Field label="Usage limit (optional)" className="min-w-[130px]">
           <input
             type="number"
             min="0"
@@ -196,82 +209,100 @@ export default function CouponsPanel() {
             value={usageLimit}
             onChange={(e) => setUsageLimit(e.target.value)}
             placeholder="Unlimited"
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           />
-        </div>
+        </Field>
         <button
           type="submit"
           disabled={creating}
-          className="px-5 py-2 font-mono text-xs font-bold uppercase tracking-widest bg-orange-500 text-black disabled:opacity-50
-            w-full min-h-[40px] sm:w-auto"
+          className={adminPrimaryBtnClass}
+          style={adminPrimaryBtnStyle}
         >
-          {creating ? "Adding..." : "Add Coupon"}
+          {creating ? "Adding..." : "Add coupon"}
         </button>
       </form>
-      {createError && <p className="mt-2 font-mono text-xs text-red-600">{createError}</p>}
+      {createError && (
+        <p className="mt-2 text-xs" style={{ color: ORANGE }}>
+          {createError}
+        </p>
+      )}
 
       <div className="mt-6">
-        {loading && <p className="text-sm opacity-60">Loading coupons...</p>}
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {loading && (
+          <p className="text-sm" style={{ color: colors.textMuted }}>
+            Loading coupons...
+          </p>
+        )}
+        {error && (
+          <p className="text-sm" style={{ color: ORANGE }}>
+            {error}
+          </p>
+        )}
 
         {!loading && !error && (
           <div className="w-full overflow-x-auto">
-          <table
-            className="w-full border-collapse text-sm
-              min-w-[640px]"
-          >
-            <thead>
-              <tr className="border-b border-black/10 text-left font-mono text-[10px] uppercase tracking-widest opacity-60">
-                <th className="py-2">Code</th>
-                <th className="py-2">Type</th>
-                <th className="py-2">Value</th>
-                <th className="py-2">Usage</th>
-                <th className="py-2">Status</th>
-                <th className="py-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {coupons.map((c) => (
-                <tr key={c.couponId} className="border-b border-black/5">
-                  <td className="py-2 pr-3 font-mono">{c.code}</td>
-                  <td className="py-2 pr-3">{c.type}</td>
-                  <td className="py-2 pr-3">{c.type === "Percentage" ? `${c.value}%` : `₹${c.value}`}</td>
-                  <td className="py-2 pr-3">
-                    {c.usageCount}
-                    {c.usageLimit ? ` / ${c.usageLimit}` : ""}
-                  </td>
-                  <td className="py-2 pr-3">
-                    <span className={c.isActive ? "text-green-600" : "text-red-600"}>
-                      {c.isActive ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="py-2 text-right space-x-3
-                    whitespace-nowrap">
-                    <button
-                      onClick={() => toggleActive(c)}
-                      disabled={togglingId === c.couponId}
-                      className="font-mono text-[10px] uppercase tracking-widest text-orange-600
-                        min-h-[32px]"
-                    >
-                      {c.isActive ? "Deactivate" : "Activate"}
-                    </button>
-                    <button
-                      onClick={() => handleDelete(c.couponId)}
-                      disabled={deletingId === c.couponId}
-                      className="font-mono text-[10px] uppercase tracking-widest text-red-600 disabled:opacity-50
-                        min-h-[32px]"
-                    >
-                      {deletingId === c.couponId ? "Deleting..." : "Delete"}
-                    </button>
-                  </td>
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead>
+                <tr className="text-left" style={adminHeadRowStyle}>
+                  <th className={adminThClass} style={adminThStyle}>Code</th>
+                  <th className={adminThClass} style={adminThStyle}>Type</th>
+                  <th className={adminThClass} style={adminThStyle}>Value</th>
+                  <th className={adminThClass} style={adminThStyle}>Usage</th>
+                  <th className={adminThClass} style={adminThStyle}>Status</th>
+                  <th className={`${adminThClass} text-right`} style={adminThStyle}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {coupons.map((c) => (
+                  <tr key={c.couponId} style={adminRowStyle}>
+                    <td className="py-2 pr-3 font-semibold">{c.code}</td>
+                    <td className="py-2 pr-3">{c.type}</td>
+                    <td className="py-2 pr-3">
+                      {c.type === "Percentage" ? `${c.value}%` : `₹${c.value}`}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {c.usageCount}
+                      {c.usageLimit ? ` / ${c.usageLimit}` : ""}
+                    </td>
+                    <td className="py-2 pr-3">
+                      <span
+                        className="text-[11px] font-semibold uppercase tracking-[0.2em]"
+                        style={{ color: c.isActive ? ORANGE : colors.textMuted }}
+                      >
+                        {c.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="space-x-3 whitespace-nowrap py-2 text-right">
+                      <button
+                        onClick={() => toggleActive(c)}
+                        disabled={togglingId === c.couponId}
+                        className={adminRowBtnClass}
+                        style={{ color: colors.text }}
+                      >
+                        {c.isActive ? "Deactivate" : "Activate"}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(c.couponId)}
+                        disabled={deletingId === c.couponId}
+                        className={adminRowBtnClass}
+                        style={{ color: ORANGE }}
+                      >
+                        {deletingId === c.couponId ? "Deleting..." : "Delete"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
-        {!loading && !error && coupons.length === 0 && <p className="mt-4 text-sm opacity-60">No coupons yet.</p>}
+        {!loading && !error && coupons.length === 0 && (
+          <p className="mt-4 text-sm" style={{ color: colors.textMuted }}>
+            No coupons yet.
+          </p>
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
+import { ORANGE, usePalette } from "@/src/lib/palette";
 import { useToast } from "@/src/context/ToastContext";
 
 type Address = {
@@ -32,7 +32,7 @@ const emptyForm = {
 type FormKey = keyof typeof emptyForm;
 
 export default function AddressBook() {
-  const { colors } = useTheme();
+  const colors = usePalette();
   const toast = useToast();
 
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -161,21 +161,28 @@ export default function AddressBook() {
 
   const inputStyle = {
     borderColor: colors.lineStrong,
-    backgroundColor: colors.panel,
+    backgroundColor: colors.bg,
     color: colors.text,
   };
-  const inputClass = "mt-1 w-full border px-3 py-2.5 text-base focus:outline-none sm:py-2 sm:text-sm";
-  const labelClass = "font-mono text-[10px] uppercase tracking-widest";
+  const inputClass =
+    "mt-2 w-full border px-3 py-3 text-base outline-none transition focus:border-[#0e0e0e] sm:py-2.5 sm:text-sm";
+  const labelClass = "text-[11px] font-medium uppercase tracking-[0.2em]";
+  const outlineBtn =
+    "border px-6 py-3 text-xs font-semibold uppercase tracking-[0.2em] transition hover:opacity-70";
 
   return (
     <div>
-      {loading && <p className="text-sm" style={{ color: colors.textMuted }}>Loading addresses...</p>}
+      {loading && (
+        <p className="text-sm" style={{ color: colors.textMuted }}>
+          Loading addresses...
+        </p>
+      )}
 
       {!loading && loadError && (
         <button
           onClick={fetchAddresses}
-          className="border px-4 py-2 font-mono text-xs uppercase tracking-widest"
-          style={{ borderColor: colors.lineStrong, color: colors.text }}
+          className={outlineBtn}
+          style={{ borderColor: colors.text, color: colors.text }}
         >
           Retry loading addresses
         </button>
@@ -184,18 +191,32 @@ export default function AddressBook() {
       {!loading && !loadError && (
         <div className="space-y-3">
           {sorted.map((addr) => (
-            <div key={addr.addressId} className="border p-4" style={{ borderColor: colors.line, backgroundColor: colors.panel }}>
+            <div
+              key={addr.addressId}
+              className="border p-4 sm:p-5"
+              style={{
+                borderColor: addr.isDefault ? colors.text : "transparent",
+                backgroundColor: colors.panel,
+              }}
+            >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="break-words text-sm font-medium" style={{ color: colors.text }}>{addr.recipientName}</p>
+                    <p className="break-words text-sm font-semibold" style={{ color: colors.text }}>
+                      {addr.recipientName}
+                    </p>
                     {addr.isDefault && (
-                      <span className="border px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest" style={{ borderColor: SIGNAL, color: SIGNAL }}>
+                      <span
+                        className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-white"
+                        style={{ backgroundColor: ORANGE }}
+                      >
                         Default
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-sm" style={{ color: colors.textMuted }}>{addr.recipientPhone}</p>
+                  <p className="mt-1 text-sm" style={{ color: colors.textMuted }}>
+                    {addr.recipientPhone}
+                  </p>
                   <p className="mt-2 break-words text-sm" style={{ color: colors.textMuted }}>
                     {addr.addressLine1}
                     {addr.addressLine2 ? `, ${addr.addressLine2}` : ""}
@@ -205,13 +226,13 @@ export default function AddressBook() {
                     {addr.city}, {addr.state} — {addr.pincode}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-4 sm:flex-col sm:items-end sm:gap-2">
+                <div className="flex shrink-0 items-center gap-5 sm:flex-col sm:items-end sm:gap-2">
                   {!addr.isDefault && (
                     <button
                       onClick={() => setAsDefault(addr.addressId)}
                       disabled={defaultingId === addr.addressId}
-                      className="py-1 font-mono text-[10px] uppercase tracking-widest disabled:opacity-50"
-                      style={{ color: SIGNAL }}
+                      className="py-1 text-[11px] font-semibold uppercase tracking-[0.2em] transition hover:opacity-70 disabled:opacity-50"
+                      style={{ color: ORANGE }}
                     >
                       {defaultingId === addr.addressId ? "Updating..." : "Make default"}
                     </button>
@@ -219,7 +240,7 @@ export default function AddressBook() {
                   <button
                     onClick={() => handleDelete(addr.addressId)}
                     disabled={deletingId === addr.addressId}
-                    className="py-1 font-mono text-[10px] uppercase tracking-widest disabled:opacity-50"
+                    className="py-1 text-[11px] font-semibold uppercase tracking-[0.2em] transition hover:opacity-70 disabled:opacity-50"
                     style={{ color: colors.textMuted }}
                   >
                     {deletingId === addr.addressId ? "Deleting..." : "Delete"}
@@ -230,7 +251,9 @@ export default function AddressBook() {
           ))}
 
           {addresses.length === 0 && (
-            <p className="text-sm" style={{ color: colors.textMuted }}>No saved addresses yet.</p>
+            <p className="text-sm" style={{ color: colors.textMuted }}>
+              No saved addresses yet.
+            </p>
           )}
         </div>
       )}
@@ -238,16 +261,22 @@ export default function AddressBook() {
       {!showForm ? (
         <button
           onClick={() => setShowForm(true)}
-          className="mt-4 w-full border px-5 py-2.5 font-mono text-xs font-bold uppercase tracking-widest transition sm:w-auto"
-          style={{ borderColor: colors.lineStrong, color: colors.text }}
+          className={`mt-5 w-full sm:w-auto ${outlineBtn}`}
+          style={{ borderColor: colors.text, color: colors.text }}
         >
           + Add address
         </button>
       ) : (
-        <form onSubmit={handleAdd} className="mt-4 space-y-3 border p-4" style={{ borderColor: colors.line }}>
-          <div className="grid gap-3 sm:grid-cols-2">
+        <form
+          onSubmit={handleAdd}
+          className="mt-5 space-y-4 border p-4 sm:p-6"
+          style={{ borderColor: colors.line }}
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor="ab-name" className={labelClass} style={{ color: colors.textMuted }}>Recipient name</label>
+              <label htmlFor="ab-name" className={labelClass} style={{ color: colors.textMuted }}>
+                Recipient name
+              </label>
               <input
                 id="ab-name"
                 required
@@ -259,7 +288,9 @@ export default function AddressBook() {
               />
             </div>
             <div>
-              <label htmlFor="ab-phone" className={labelClass} style={{ color: colors.textMuted }}>Recipient phone</label>
+              <label htmlFor="ab-phone" className={labelClass} style={{ color: colors.textMuted }}>
+                Recipient phone
+              </label>
               <input
                 id="ab-phone"
                 required
@@ -275,7 +306,9 @@ export default function AddressBook() {
           </div>
 
           <div>
-            <label htmlFor="ab-l1" className={labelClass} style={{ color: colors.textMuted }}>Address line 1</label>
+            <label htmlFor="ab-l1" className={labelClass} style={{ color: colors.textMuted }}>
+              Address line 1
+            </label>
             <input
               id="ab-l1"
               required
@@ -287,7 +320,9 @@ export default function AddressBook() {
             />
           </div>
           <div>
-            <label htmlFor="ab-l2" className={labelClass} style={{ color: colors.textMuted }}>Address line 2 (optional)</label>
+            <label htmlFor="ab-l2" className={labelClass} style={{ color: colors.textMuted }}>
+              Address line 2 (optional)
+            </label>
             <input
               id="ab-l2"
               autoComplete="address-line2"
@@ -298,7 +333,9 @@ export default function AddressBook() {
             />
           </div>
           <div>
-            <label htmlFor="ab-landmark" className={labelClass} style={{ color: colors.textMuted }}>Landmark (optional)</label>
+            <label htmlFor="ab-landmark" className={labelClass} style={{ color: colors.textMuted }}>
+              Landmark (optional)
+            </label>
             <input
               id="ab-landmark"
               value={form.landmark}
@@ -308,9 +345,11 @@ export default function AddressBook() {
             />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div>
-              <label htmlFor="ab-city" className={labelClass} style={{ color: colors.textMuted }}>City</label>
+              <label htmlFor="ab-city" className={labelClass} style={{ color: colors.textMuted }}>
+                City
+              </label>
               <input
                 id="ab-city"
                 required
@@ -322,7 +361,9 @@ export default function AddressBook() {
               />
             </div>
             <div>
-              <label htmlFor="ab-state" className={labelClass} style={{ color: colors.textMuted }}>State</label>
+              <label htmlFor="ab-state" className={labelClass} style={{ color: colors.textMuted }}>
+                State
+              </label>
               <input
                 id="ab-state"
                 required
@@ -334,7 +375,9 @@ export default function AddressBook() {
               />
             </div>
             <div>
-              <label htmlFor="ab-pin" className={labelClass} style={{ color: colors.textMuted }}>Pincode</label>
+              <label htmlFor="ab-pin" className={labelClass} style={{ color: colors.textMuted }}>
+                Pincode
+              </label>
               <input
                 id="ab-pin"
                 required
@@ -349,20 +392,20 @@ export default function AddressBook() {
             </div>
           </div>
 
-          <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
             <button
               type="button"
               onClick={closeForm}
-              className="px-5 py-2.5 font-mono text-xs uppercase tracking-widest"
-              style={{ color: colors.textMuted }}
+              className={outlineBtn}
+              style={{ borderColor: colors.lineStrong, color: colors.textMuted }}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="px-5 py-2.5 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95 disabled:opacity-50"
-              style={{ backgroundColor: SIGNAL, color: "#131210" }}
+              className="px-8 py-3 text-xs font-semibold uppercase tracking-[0.2em] transition hover:opacity-80 disabled:opacity-50"
+              style={{ backgroundColor: colors.text, color: colors.bg }}
             >
               {saving ? "Saving..." : "Save address"}
             </button>

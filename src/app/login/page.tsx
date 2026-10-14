@@ -4,7 +4,7 @@ import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, getSession } from "next-auth/react";
-import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
+import { ORANGE, usePalette } from "@/src/lib/palette";
 import { useToast } from "@/src/context/ToastContext";
 
 const PENDING_CART_KEY = "hustler-pending-cart-item";
@@ -13,7 +13,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/";
-  const { colors } = useTheme();
+  const colors = usePalette();
   const toast = useToast();
 
   const [email, setEmail] = useState("");
@@ -111,34 +111,45 @@ function LoginForm() {
     }
   }
 
+  const labelClass = "text-[11px] font-medium uppercase tracking-[0.2em]";
   const inputClass =
-    "mt-2 w-full border px-4 py-3 text-base focus:outline-none sm:text-sm";
+    "mt-2 w-full border px-4 py-3 text-base outline-none transition focus:border-[#0e0e0e] sm:text-sm";
+  const inputStyle = {
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.bg,
+    color: colors.text,
+  };
 
   return (
     <div
-      className="flex min-h-[60dvh] w-full flex-col justify-center"
-      style={{ backgroundColor: colors.bg }}
+      className="flex min-h-[70vh] w-full flex-col justify-center"
+      style={{ backgroundColor: colors.bg, color: colors.text }}
     >
       <div className="mx-auto flex w-full max-w-md flex-col overflow-x-hidden px-4 py-10 sm:px-8 sm:py-16">
         <span
-          className="font-mono text-[11px] tracking-[0.25em]"
-          style={{ color: SIGNAL }}
+          className="text-[11px] font-medium uppercase tracking-[0.25em]"
+          style={{ color: ORANGE }}
         >
           Welcome back
         </span>
 
         <h1
-          className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-4xl"
+          className="mt-1.5 font-display text-4xl font-black uppercase leading-[0.95] tracking-[-0.03em] sm:text-6xl"
           style={{ color: colors.text }}
         >
-          Log In
+          Log in
         </h1>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
+        <form
+          onSubmit={handleSubmit}
+          className="mt-8 space-y-5 p-5 sm:p-6"
+          style={{ backgroundColor: colors.panel }}
+          noValidate
+        >
           <div>
             <label
               htmlFor="login-email"
-              className="font-mono text-[11px] uppercase tracking-widest"
+              className={labelClass}
               style={{ color: colors.textMuted }}
             >
               Email
@@ -152,18 +163,14 @@ function LoginForm() {
               placeholder="you@email.com"
               autoComplete="email"
               className={inputClass}
-              style={{
-                borderColor: colors.lineStrong,
-                backgroundColor: colors.panel,
-                color: colors.text,
-              }}
+              style={inputStyle}
             />
           </div>
 
           <div>
             <label
               htmlFor="login-password"
-              className="font-mono text-[11px] uppercase tracking-widest"
+              className={labelClass}
               style={{ color: colors.textMuted }}
             >
               Password
@@ -177,16 +184,12 @@ function LoginForm() {
               placeholder="••••••••"
               autoComplete="current-password"
               className={inputClass}
-              style={{
-                borderColor: colors.lineStrong,
-                backgroundColor: colors.panel,
-                color: colors.text,
-              }}
+              style={inputStyle}
             />
           </div>
 
           {error && (
-            <p className="font-mono text-[11px]" style={{ color: SIGNAL }}>
+            <p className="text-xs" style={{ color: ORANGE }}>
               {error}
             </p>
           )}
@@ -194,22 +197,19 @@ function LoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ backgroundColor: SIGNAL, color: "#131210" }}
+            className="w-full px-8 py-4 text-xs font-semibold uppercase tracking-[0.2em] transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: colors.text, color: colors.bg }}
           >
-            {loading ? "Logging in..." : "Log In"}
+            {loading ? "Logging in..." : "Log in"}
           </button>
         </form>
 
-        <p
-          className="mt-6 text-center font-mono text-[11px]"
-          style={{ color: colors.textMuted }}
-        >
+        <p className="mt-6 text-center text-xs" style={{ color: colors.textMuted }}>
           Don&apos;t have an account?{" "}
           <Link
             href={`/signup?redirect=${encodeURIComponent(redirectTo)}`}
-            style={{ color: SIGNAL }}
-            className="hover:underline"
+            style={{ color: ORANGE }}
+            className="font-medium hover:underline"
           >
             Sign up
           </Link>

@@ -4,12 +4,11 @@
  * Route: app/size-guide/page.tsx
  *
  * Static measurement reference. If you'd rather pull real per-product
- * measurements from the backend later, this is a fine placeholder
- * to ship first — swap the SIZE_CHART constant for an API call
- * against /api/products/[id] when that data exists.
+ * measurements from the backend later, swap the size constants for an API
+ * call against /api/products/[id] when that data exists.
  */
 
-import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
+import { ORANGE, usePalette } from "@/src/lib/palette";
 
 type SizeRow = {
   size: string;
@@ -34,45 +33,34 @@ const HOODIE_SIZES: SizeRow[] = [
   { size: "XXL", chest: "48", length: "30", sleeve: "26" },
 ];
 
-function SizeTable({
-  title,
-  rows,
-}: {
-  title: string;
-  rows: SizeRow[];
-}) {
-  const { colors } = useTheme();
+function SizeTable({ title, rows }: { title: string; rows: SizeRow[] }) {
+  const colors = usePalette();
 
   return (
-    <div className="mt-8">
+    <div className="mt-10">
       <h2
-        className="font-display text-xl uppercase tracking-tight
-          sm:text-2xl"
+        className="font-display text-2xl font-black uppercase leading-[0.95] tracking-[-0.03em] sm:text-3xl"
         style={{ color: colors.text }}
       >
         {title}
       </h2>
 
       <div
-        className="mt-4 overflow-x-auto border
-          w-full max-w-full"
+        className="mt-4 w-full max-w-full overflow-x-auto border"
         style={{ borderColor: colors.line }}
       >
-        <table className="w-full min-w-[420px] text-left font-mono text-xs">
+        <table className="w-full min-w-[420px] text-left text-sm">
           <thead>
             <tr style={{ backgroundColor: colors.panel }}>
-              {["Size", "Chest (in)", "Length (in)", "Sleeve (in)"].map(
-                (h) => (
-                  <th
-                    key={h}
-                    className="px-4 py-3 uppercase tracking-widest
-                      whitespace-nowrap"
-                    style={{ color: colors.textMuted }}
-                  >
-                    {h}
-                  </th>
-                )
-              )}
+              {["Size", "Chest (in)", "Length (in)", "Sleeve (in)"].map((h) => (
+                <th
+                  key={h}
+                  className="whitespace-nowrap px-4 py-3 text-[11px] font-medium uppercase tracking-[0.2em]"
+                  style={{ color: colors.textMuted }}
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
 
@@ -81,14 +69,10 @@ function SizeTable({
               <tr
                 key={row.size}
                 style={{
-                  borderTop:
-                    i === 0 ? "none" : `1px solid ${colors.line}`,
+                  borderTop: i === 0 ? "none" : `1px solid ${colors.line}`,
                 }}
               >
-                <td
-                  className="px-4 py-3 font-bold"
-                  style={{ color: SIGNAL }}
-                >
+                <td className="px-4 py-3 font-bold" style={{ color: ORANGE }}>
                   {row.size}
                 </td>
                 <td className="px-4 py-3" style={{ color: colors.text }}>
@@ -110,57 +94,48 @@ function SizeTable({
 }
 
 export default function SizeGuidePage() {
-  const { colors } = useTheme();
+  const colors = usePalette();
 
   return (
-    <div
-      className="mx-auto max-w-3xl px-5 py-14 sm:px-8 sm:py-20
-        w-full min-w-0 break-words md:px-10 lg:py-24"
-    >
-      <span
-        className="font-mono text-[11px] tracking-[0.25em]"
-        style={{ color: SIGNAL }}
-      >
-        Support
-      </span>
+    <div style={{ backgroundColor: colors.bg, color: colors.text }} className="min-h-[70vh]">
+      <div className="mx-auto w-full min-w-0 max-w-3xl break-words px-4 py-10 sm:px-8 sm:py-16 md:px-10">
+        <span
+          className="text-[11px] font-medium uppercase tracking-[0.25em]"
+          style={{ color: ORANGE }}
+        >
+          Support
+        </span>
 
-      <h1
-        className="mt-2 font-display text-4xl uppercase tracking-tight sm:text-5xl
-          break-words max-[380px]:text-3xl"
-        style={{ color: colors.text }}
-      >
-        Size Guide
-      </h1>
+        <h1
+          className="mt-1.5 break-words font-display text-4xl font-black uppercase leading-[0.95] tracking-[-0.03em] max-[380px]:text-3xl sm:text-6xl"
+          style={{ color: colors.text }}
+        >
+          Size guide
+        </h1>
 
-      <p
-        className="mt-4 max-w-xl text-sm leading-relaxed"
-        style={{ color: colors.textMuted }}
-      >
-        All measurements are in inches and taken flat, garment laid out. If you're between
-        sizes, we generally recommend sizing up for a relaxed fit — most of our streetwear
-        pieces are cut on the heavier, boxier side.
-      </p>
-
-      <SizeTable title="Tees & Crewnecks" rows={TSHIRT_SIZES} />
-      <SizeTable title="Hoodies" rows={HOODIE_SIZES} />
-
-      <div
-        className="mt-10 border p-5 text-sm
-          sm:p-6"
-        style={{
-          borderColor: colors.line,
-          backgroundColor: colors.panel,
-          color: colors.textMuted,
-        }}
-      >
-        <p>
-          <span style={{ color: colors.text, fontWeight: 600 }}>
-            How to measure:
-          </span>{" "}
-          Chest — measure straight across, one inch below the armhole. Length — from the
-          highest point of the shoulder to the hem. Sleeve — from the shoulder seam to the
-          cuff.
+        <p
+          className="mt-4 max-w-xl text-sm leading-relaxed"
+          style={{ color: colors.textMuted }}
+        >
+          All measurements are in inches and taken flat, garment laid out. If
+          you&apos;re between sizes, we generally recommend sizing up for a relaxed
+          fit — most of our streetwear pieces are cut on the heavier, boxier side.
         </p>
+
+        <SizeTable title="Tees & crewnecks" rows={TSHIRT_SIZES} />
+        <SizeTable title="Hoodies" rows={HOODIE_SIZES} />
+
+        <div
+          className="mt-10 p-5 text-sm leading-relaxed sm:p-6"
+          style={{ backgroundColor: colors.panel, color: colors.textMuted }}
+        >
+          <p>
+            <span style={{ color: colors.text, fontWeight: 600 }}>How to measure:</span>{" "}
+            Chest — measure straight across, one inch below the armhole. Length —
+            from the highest point of the shoulder to the hem. Sleeve — from the
+            shoulder seam to the cuff.
+          </p>
+        </div>
       </div>
     </div>
   );

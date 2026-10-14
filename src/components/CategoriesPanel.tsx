@@ -2,6 +2,23 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useToast } from "@/src/context/ToastContext";
+import {
+  ORANGE,
+  colors,
+  Field,
+  adminFormClass,
+  adminFormStyle,
+  adminInputClass,
+  adminInputStyle,
+  adminCellInputClass,
+  adminPrimaryBtnClass,
+  adminPrimaryBtnStyle,
+  adminRowBtnClass,
+  adminThClass,
+  adminThStyle,
+  adminHeadRowStyle,
+  adminRowStyle,
+} from "@/src/components/AdminUi";
 
 type Category = {
   categoryId: string;
@@ -68,7 +85,7 @@ export default function CategoriesPanel() {
       });
       const data = await res.json();
       if (!res.ok) {
-        const firstFieldError = data.errors ? Object.values(data.errors)[0] as string[] : null;
+        const firstFieldError = data.errors ? (Object.values(data.errors)[0] as string[]) : null;
         throw new Error(firstFieldError?.[0] ?? data.message ?? "Failed to create category.");
       }
       setName("");
@@ -114,7 +131,6 @@ export default function CategoriesPanel() {
       await fetchCategories();
       toast.success("Category updated.");
     } catch (err) {
-      // alert(err instanceof Error ? err.message : "Failed to update category.");
       toast.error(err instanceof Error ? err.message : "Failed to update category.");
     } finally {
       setSavingEdit(false);
@@ -133,7 +149,6 @@ export default function CategoriesPanel() {
       await fetchCategories();
       toast.success("Category deleted.");
     } catch (err) {
-      // alert(err instanceof Error ? err.message : "Failed to delete category.");
       toast.error(err instanceof Error ? err.message : "Failed to delete category.");
     } finally {
       setDeletingId(null);
@@ -143,148 +158,169 @@ export default function CategoriesPanel() {
   return (
     <div className="w-full min-w-0">
       {/* Create form */}
-      <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3 border border-black/10 p-4">
-        <div className="flex-1 min-w-[180px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Category name</label>
+      <form onSubmit={handleCreate} className={adminFormClass} style={adminFormStyle}>
+        <Field label="Category name" className="min-w-[180px] flex-1">
           <input
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Tote Bags"
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           />
-        </div>
-        <div className="flex-1 min-w-[220px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Description (optional)</label>
+        </Field>
+        <Field label="Description (optional)" className="min-w-[220px] flex-1">
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Short description"
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           />
-        </div>
-        <div className="flex-1 min-w-[220px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Image URL (optional)</label>
+        </Field>
+        <Field label="Image URL (optional)" className="min-w-[220px] flex-1">
           <input
             value={imageUrl}
             onChange={(e) => setImageUrl(e.target.value)}
             placeholder="https://..."
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           />
-        </div>
+        </Field>
         <button
           type="submit"
           disabled={creating}
-          className="px-5 py-2 font-mono text-xs font-bold uppercase tracking-widest bg-orange-500 text-black disabled:opacity-50
-            w-full min-h-[40px] sm:w-auto"
+          className={adminPrimaryBtnClass}
+          style={adminPrimaryBtnStyle}
         >
-          {creating ? "Adding..." : "Add Category"}
+          {creating ? "Adding..." : "Add category"}
         </button>
       </form>
-      {createError && <p className="mt-2 font-mono text-xs text-red-600">{createError}</p>}
+      {createError && (
+        <p className="mt-2 text-xs" style={{ color: ORANGE }}>
+          {createError}
+        </p>
+      )}
 
       {/* List */}
       <div className="mt-6">
-        {loading && <p className="text-sm opacity-60">Loading categories...</p>}
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {loading && (
+          <p className="text-sm" style={{ color: colors.textMuted }}>
+            Loading categories...
+          </p>
+        )}
+        {error && (
+          <p className="text-sm" style={{ color: ORANGE }}>
+            {error}
+          </p>
+        )}
 
         {!loading && !error && (
           <div className="w-full overflow-x-auto">
-          <table
-            className="w-full border-collapse text-sm
-              min-w-[640px]"
-          >
-            <thead>
-              <tr className="border-b border-black/10 text-left font-mono text-[10px] uppercase tracking-widest opacity-60">
-                <th className="py-2">Name</th>
-                <th className="py-2">Description</th>
-                <th className="py-2">Image</th>
-                <th className="py-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {categories.map((cat) => (
-                <tr key={cat.categoryId} className="border-b border-black/5">
-                  {editingId === cat.categoryId ? (
-                    <>
-                      <td className="py-2 pr-3">
-                        <input
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          className="w-full border border-black/20 px-2 py-1 text-sm focus:outline-none"
-                        />
-                      </td>
-                      <td className="py-2 pr-3">
-                        <input
-                          value={editDescription}
-                          onChange={(e) => setEditDescription(e.target.value)}
-                          className="w-full border border-black/20 px-2 py-1 text-sm focus:outline-none"
-                        />
-                      </td>
-                      <td className="py-2 pr-3">
-                        <input
-                          value={editImageUrl}
-                          onChange={(e) => setEditImageUrl(e.target.value)}
-                          placeholder="https://..."
-                          className="w-full border border-black/20 px-2 py-1 text-sm focus:outline-none"
-                        />
-                      </td>
-                      <td className="py-2 text-right space-x-2
-                        whitespace-nowrap">
-                        <button
-                          onClick={() => saveEdit(cat.categoryId)}
-                          disabled={savingEdit}
-                          className="font-mono text-[10px] uppercase tracking-widest text-orange-600
-                            min-h-[32px]"
-                        >
-                          Save
-                        </button>
-                        <button onClick={cancelEdit} className="font-mono text-[10px] uppercase tracking-widest opacity-60
-                          min-h-[32px]">
-                          Cancel
-                        </button>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="py-2 pr-3">{cat.categoryName}</td>
-                      <td className="py-2 pr-3 opacity-70">{cat.description || "—"}</td>
-                      <td className="py-2 pr-3 opacity-70">
-                        {cat.imageUrl ? (
-                          <img src={cat.imageUrl} alt={cat.categoryName} className="h-8 w-8 object-cover" />
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="py-2 text-right space-x-3
-                        whitespace-nowrap">
-                        <button
-                          onClick={() => startEdit(cat)}
-                          className="font-mono text-[10px] uppercase tracking-widest text-orange-600
-                            min-h-[32px]"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(cat.categoryId)}
-                          disabled={deletingId === cat.categoryId}
-                          className="font-mono text-[10px] uppercase tracking-widest text-red-600 disabled:opacity-50
-                            min-h-[32px]"
-                        >
-                          {deletingId === cat.categoryId ? "Deleting..." : "Delete"}
-                        </button>
-                      </td>
-                    </>
-                  )}
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead>
+                <tr className="text-left" style={adminHeadRowStyle}>
+                  <th className={adminThClass} style={adminThStyle}>Name</th>
+                  <th className={adminThClass} style={adminThStyle}>Description</th>
+                  <th className={adminThClass} style={adminThStyle}>Image</th>
+                  <th className={`${adminThClass} text-right`} style={adminThStyle}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {categories.map((cat) => (
+                  <tr key={cat.categoryId} style={adminRowStyle}>
+                    {editingId === cat.categoryId ? (
+                      <>
+                        <td className="py-2 pr-3">
+                          <input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className={adminCellInputClass}
+                            style={adminInputStyle}
+                          />
+                        </td>
+                        <td className="py-2 pr-3">
+                          <input
+                            value={editDescription}
+                            onChange={(e) => setEditDescription(e.target.value)}
+                            className={adminCellInputClass}
+                            style={adminInputStyle}
+                          />
+                        </td>
+                        <td className="py-2 pr-3">
+                          <input
+                            value={editImageUrl}
+                            onChange={(e) => setEditImageUrl(e.target.value)}
+                            placeholder="https://..."
+                            className={adminCellInputClass}
+                            style={adminInputStyle}
+                          />
+                        </td>
+                        <td className="space-x-3 whitespace-nowrap py-2 text-right">
+                          <button
+                            onClick={() => saveEdit(cat.categoryId)}
+                            disabled={savingEdit}
+                            className={adminRowBtnClass}
+                            style={{ color: ORANGE }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            className={adminRowBtnClass}
+                            style={{ color: colors.textMuted }}
+                          >
+                            Cancel
+                          </button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-2 pr-3 font-medium">{cat.categoryName}</td>
+                        <td className="py-2 pr-3" style={{ color: colors.textMuted }}>
+                          {cat.description || "—"}
+                        </td>
+                        <td className="py-2 pr-3" style={{ color: colors.textMuted }}>
+                          {cat.imageUrl ? (
+                            <img
+                              src={cat.imageUrl}
+                              alt={cat.categoryName}
+                              className="h-8 w-8 object-cover"
+                            />
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="space-x-3 whitespace-nowrap py-2 text-right">
+                          <button
+                            onClick={() => startEdit(cat)}
+                            className={adminRowBtnClass}
+                            style={{ color: colors.text }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(cat.categoryId)}
+                            disabled={deletingId === cat.categoryId}
+                            className={adminRowBtnClass}
+                            style={{ color: ORANGE }}
+                          >
+                            {deletingId === cat.categoryId ? "Deleting..." : "Delete"}
+                          </button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
         {!loading && !error && categories.length === 0 && (
-          <p className="mt-4 text-sm opacity-60">No categories yet — add one above.</p>
+          <p className="mt-4 text-sm" style={{ color: colors.textMuted }}>
+            No categories yet — add one above.
+          </p>
         )}
       </div>
     </div>

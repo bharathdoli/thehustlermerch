@@ -2,6 +2,23 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useToast } from "@/src/context/ToastContext";
+import {
+  ORANGE,
+  colors,
+  Field,
+  adminFormClass,
+  adminFormStyle,
+  adminInputClass,
+  adminInputStyle,
+  adminCellInputClass,
+  adminPrimaryBtnClass,
+  adminPrimaryBtnStyle,
+  adminRowBtnClass,
+  adminThClass,
+  adminThStyle,
+  adminHeadRowStyle,
+  adminRowStyle,
+} from "@/src/components/AdminUi";
 
 type Product = { productId: string; productName: string };
 type Variant = {
@@ -139,7 +156,6 @@ export default function VariantsPanel() {
       await fetchVariants(selectedProductId);
       toast.success("Variant updated.");
     } catch (err) {
-      // alert(err instanceof Error ? err.message : "Failed to update variant.");
       toast.error(err instanceof Error ? err.message : "Failed to update variant.");
     } finally {
       setSavingEdit(false);
@@ -150,7 +166,9 @@ export default function VariantsPanel() {
     if (!confirm("Delete this variant?")) return;
     setDeletingId(variantId);
     try {
-      const res = await fetch(`/api/products/${selectedProductId}/variants/${variantId}`, { method: "DELETE" });
+      const res = await fetch(`/api/products/${selectedProductId}/variants/${variantId}`, {
+        method: "DELETE",
+      });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.message ?? "Failed to delete variant.");
@@ -158,7 +176,6 @@ export default function VariantsPanel() {
       await fetchVariants(selectedProductId);
       toast.success("Variant deleted.");
     } catch (err) {
-      // alert(err instanceof Error ? err.message : "Failed to delete variant.");
       toast.error(err instanceof Error ? err.message : "Failed to delete variant.");
     } finally {
       setDeletingId(null);
@@ -167,13 +184,13 @@ export default function VariantsPanel() {
 
   return (
     <div className="w-full min-w-0">
-      <div className="max-w-xs w-full">
-        <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Select product</label>
+      <Field label="Select product" className="w-full max-w-xs">
         <select
           value={selectedProductId}
           onChange={(e) => handleProductChange(e.target.value)}
           disabled={loadingProducts}
-          className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+          className={adminInputClass}
+          style={adminInputStyle}
         >
           <option value="">{loadingProducts ? "Loading..." : "Choose a product..."}</option>
           {products.map((p) => (
@@ -182,31 +199,34 @@ export default function VariantsPanel() {
             </option>
           ))}
         </select>
-      </div>
+      </Field>
 
       {selectedProductId && (
         <>
-          <form onSubmit={handleCreate} className="mt-6 flex flex-wrap items-end gap-3 border border-black/10 p-4">
-            <div className="min-w-[120px] max-w-full">
-              <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Colour</label>
+          <form
+            onSubmit={handleCreate}
+            className={`${adminFormClass} mt-6`}
+            style={adminFormStyle}
+          >
+            <Field label="Colour" className="min-w-[120px]">
               <input
                 value={colour}
                 onChange={(e) => setColour(e.target.value)}
                 placeholder="e.g. Black"
-                className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+                className={adminInputClass}
+                style={adminInputStyle}
               />
-            </div>
-            <div className="min-w-[100px] max-w-full">
-              <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Size</label>
+            </Field>
+            <Field label="Size" className="min-w-[100px]">
               <input
                 value={size}
                 onChange={(e) => setSize(e.target.value)}
                 placeholder="e.g. M"
-                className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+                className={adminInputClass}
+                style={adminInputStyle}
               />
-            </div>
-            <div className="min-w-[100px] max-w-full">
-              <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Price (₹)</label>
+            </Field>
+            <Field label="Price (₹)" className="min-w-[100px]">
               <input
                 required
                 type="number"
@@ -214,133 +234,156 @@ export default function VariantsPanel() {
                 step="0.01"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+                className={adminInputClass}
+                style={adminInputStyle}
               />
-            </div>
-            <div className="min-w-[100px] max-w-full">
-              <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Stock</label>
+            </Field>
+            <Field label="Stock" className="min-w-[100px]">
               <input
                 required
                 type="number"
                 min="0"
                 value={stockQuantity}
                 onChange={(e) => setStockQuantity(e.target.value)}
-                className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+                className={adminInputClass}
+                style={adminInputStyle}
               />
-            </div>
+            </Field>
             <button
               type="submit"
               disabled={creating}
-              className="px-5 py-2 font-mono text-xs font-bold uppercase tracking-widest bg-orange-500 text-black disabled:opacity-50
-                w-full min-h-[40px] sm:w-auto"
+              className={adminPrimaryBtnClass}
+              style={adminPrimaryBtnStyle}
             >
-              {creating ? "Adding..." : "Add Variant"}
+              {creating ? "Adding..." : "Add variant"}
             </button>
           </form>
-          {createError && <p className="mt-2 font-mono text-xs text-red-600">{createError}</p>}
+          {createError && (
+            <p className="mt-2 text-xs" style={{ color: ORANGE }}>
+              {createError}
+            </p>
+          )}
 
           <div className="mt-6">
-            {loadingVariants && <p className="text-sm opacity-60">Loading variants...</p>}
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {loadingVariants && (
+              <p className="text-sm" style={{ color: colors.textMuted }}>
+                Loading variants...
+              </p>
+            )}
+            {error && (
+              <p className="text-sm" style={{ color: ORANGE }}>
+                {error}
+              </p>
+            )}
 
             {!loadingVariants && !error && (
               <div className="w-full overflow-x-auto">
-              <table
-                className="w-full border-collapse text-sm
-                  min-w-[520px]"
-              >
-                <thead>
-                  <tr className="border-b border-black/10 text-left font-mono text-[10px] uppercase tracking-widest opacity-60">
-                    <th className="py-2">Colour</th>
-                    <th className="py-2">Size</th>
-                    <th className="py-2">Price</th>
-                    <th className="py-2">Stock</th>
-                    <th className="py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {variants.map((v) => (
-                    <tr key={v.variantId} className="border-b border-black/5">
-                      {editingId === v.variantId ? (
-                        <>
-                          <td className="py-2 pr-3">
-                            <input
-                              value={editColour}
-                              onChange={(e) => setEditColour(e.target.value)}
-                              className="w-20 border border-black/20 px-2 py-1 text-sm focus:outline-none"
-                            />
-                          </td>
-                          <td className="py-2 pr-3">
-                            <input
-                              value={editSize}
-                              onChange={(e) => setEditSize(e.target.value)}
-                              className="w-16 border border-black/20 px-2 py-1 text-sm focus:outline-none"
-                            />
-                          </td>
-                          <td className="py-2 pr-3">
-                            <input
-                              type="number"
-                              value={editPrice}
-                              onChange={(e) => setEditPrice(e.target.value)}
-                              className="w-20 border border-black/20 px-2 py-1 text-sm focus:outline-none"
-                            />
-                          </td>
-                          <td className="py-2 pr-3">
-                            <input
-                              type="number"
-                              value={editStock}
-                              onChange={(e) => setEditStock(e.target.value)}
-                              className="w-20 border border-black/20 px-2 py-1 text-sm focus:outline-none"
-                            />
-                          </td>
-                          <td className="py-2 text-right space-x-2
-                            whitespace-nowrap">
-                            <button
-                              onClick={() => saveEdit(v.variantId)}
-                              disabled={savingEdit}
-                              className="font-mono text-[10px] uppercase tracking-widest text-orange-600
-                                min-h-[32px]"
-                            >
-                              Save
-                            </button>
-                            <button onClick={() => { setEditingId(null); toast.info("Edit cancelled."); }} className="font-mono text-[10px] uppercase tracking-widest opacity-60
-                              min-h-[32px]">
-                              Cancel
-                            </button>
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="py-2 pr-3">{v.colour || "—"}</td>
-                          <td className="py-2 pr-3">{v.size || "—"}</td>
-                          <td className="py-2 pr-3">₹{v.price}</td>
-                          <td className="py-2 pr-3">{v.stockQuantity}</td>
-                          <td className="py-2 text-right space-x-3
-                            whitespace-nowrap">
-                            <button onClick={() => startEdit(v)} className="font-mono text-[10px] uppercase tracking-widest text-orange-600
-                              min-h-[32px]">
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDelete(v.variantId)}
-                              disabled={deletingId === v.variantId}
-                              className="font-mono text-[10px] uppercase tracking-widest text-red-600 disabled:opacity-50
-                                min-h-[32px]"
-                            >
-                              {deletingId === v.variantId ? "Deleting..." : "Delete"}
-                            </button>
-                          </td>
-                        </>
-                      )}
+                <table className="w-full min-w-[520px] border-collapse text-sm">
+                  <thead>
+                    <tr className="text-left" style={adminHeadRowStyle}>
+                      <th className={adminThClass} style={adminThStyle}>Colour</th>
+                      <th className={adminThClass} style={adminThStyle}>Size</th>
+                      <th className={adminThClass} style={adminThStyle}>Price</th>
+                      <th className={adminThClass} style={adminThStyle}>Stock</th>
+                      <th className={`${adminThClass} text-right`} style={adminThStyle}>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {variants.map((v) => (
+                      <tr key={v.variantId} style={adminRowStyle}>
+                        {editingId === v.variantId ? (
+                          <>
+                            <td className="py-2 pr-3">
+                              <input
+                                value={editColour}
+                                onChange={(e) => setEditColour(e.target.value)}
+                                className={`${adminCellInputClass} !w-24`}
+                                style={adminInputStyle}
+                              />
+                            </td>
+                            <td className="py-2 pr-3">
+                              <input
+                                value={editSize}
+                                onChange={(e) => setEditSize(e.target.value)}
+                                className={`${adminCellInputClass} !w-16`}
+                                style={adminInputStyle}
+                              />
+                            </td>
+                            <td className="py-2 pr-3">
+                              <input
+                                type="number"
+                                value={editPrice}
+                                onChange={(e) => setEditPrice(e.target.value)}
+                                className={`${adminCellInputClass} !w-24`}
+                                style={adminInputStyle}
+                              />
+                            </td>
+                            <td className="py-2 pr-3">
+                              <input
+                                type="number"
+                                value={editStock}
+                                onChange={(e) => setEditStock(e.target.value)}
+                                className={`${adminCellInputClass} !w-24`}
+                                style={adminInputStyle}
+                              />
+                            </td>
+                            <td className="space-x-3 whitespace-nowrap py-2 text-right">
+                              <button
+                                onClick={() => saveEdit(v.variantId)}
+                                disabled={savingEdit}
+                                className={adminRowBtnClass}
+                                style={{ color: ORANGE }}
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingId(null);
+                                  toast.info("Edit cancelled.");
+                                }}
+                                className={adminRowBtnClass}
+                                style={{ color: colors.textMuted }}
+                              >
+                                Cancel
+                              </button>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="py-2 pr-3">{v.colour || "—"}</td>
+                            <td className="py-2 pr-3">{v.size || "—"}</td>
+                            <td className="py-2 pr-3">₹{v.price}</td>
+                            <td className="py-2 pr-3">{v.stockQuantity}</td>
+                            <td className="space-x-3 whitespace-nowrap py-2 text-right">
+                              <button
+                                onClick={() => startEdit(v)}
+                                className={adminRowBtnClass}
+                                style={{ color: colors.text }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDelete(v.variantId)}
+                                disabled={deletingId === v.variantId}
+                                className={adminRowBtnClass}
+                                style={{ color: ORANGE }}
+                              >
+                                {deletingId === v.variantId ? "Deleting..." : "Delete"}
+                              </button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
 
             {!loadingVariants && !error && variants.length === 0 && (
-              <p className="mt-4 text-sm opacity-60">No variants for this product yet.</p>
+              <p className="mt-4 text-sm" style={{ color: colors.textMuted }}>
+                No variants for this product yet.
+              </p>
             )}
           </div>
         </>

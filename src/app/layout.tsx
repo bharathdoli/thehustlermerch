@@ -2,14 +2,13 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-import { ThemeProvider } from "@/src/context/ThemeContext";
 import { CartProvider } from "@/src/context/CartContext";
 import { AuthProvider } from "@/src/context/AuthContext";
 import { ToastProvider } from "@/src/context/ToastContext";
 
-import SessionProviderWrapper from "@/src/components/SessionProviderWrapper";
+import SessionProviderWrapper from "@/src/components/sessionProviderWrapper";
 import Header from "@/src/components/Header";
-import AnnouncementBar from "@/src/components/AnnouncementBar";
+// import AnnouncementBar from "@/src/components/AnnouncementBar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,18 +33,16 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="flex min-h-[100dvh] flex-col bg-white text-[#0e0e0e]">
         <SessionProviderWrapper>
           <AuthProvider>
-            <ThemeProvider>
-              <ToastProvider>
-                <CartProvider>
-                  <AnnouncementBar />
-                  <Header />
-                  {children}
-                </CartProvider>
-              </ToastProvider>
-            </ThemeProvider>
+            <ToastProvider>
+              <CartProvider>
+                {/* <AnnouncementBar /> */}
+                <Header />
+                <main className="flex flex-1 flex-col">{children}</main>
+              </CartProvider>
+            </ToastProvider>
           </AuthProvider>
         </SessionProviderWrapper>
       </body>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
+import { ORANGE, usePalette } from "@/src/lib/palette";
 
 type ProductVariant = {
   variantId?: string;
@@ -23,14 +23,8 @@ type Product = {
   variants?: ProductVariant[];
 };
 
-function CardImg({
-  src,
-  alt,
-}: {
-  src: string;
-  alt: string;
-}) {
-  const { colors } = useTheme();
+function CardImg({ src, alt }: { src: string; alt: string }) {
+  const colors = usePalette();
   const [failed, setFailed] = useState(false);
 
   if (!src || failed) {
@@ -40,10 +34,10 @@ function CardImg({
         style={{ backgroundColor: colors.panel }}
       >
         <span
-          className="font-mono text-[10px] tracking-widest"
+          className="text-[10px] uppercase tracking-[0.2em]"
           style={{ color: colors.textMuted }}
         >
-          IMAGE UNAVAILABLE
+          Image unavailable
         </span>
       </div>
     );
@@ -55,22 +49,16 @@ function CardImg({
       alt={alt}
       onError={() => setFailed(true)}
       loading="lazy"
-      className="h-full w-full object-cover grayscale transition duration-500 group-hover:scale-105 group-hover:grayscale-0"
+      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
     />
   );
 }
 
 function StarRating({ rating }: { rating: number }) {
-  const { theme } = useTheme();
-
-  const emptyStroke =
-    theme === "dark" ? "#5a5648" : "#c9c1af";
+  const colors = usePalette();
 
   return (
-    <div
-      className="flex items-center gap-0.5"
-      aria-label={`${rating} out of 5 stars`}
-    >
+    <div className="flex items-center gap-0.5" aria-label={`${rating} out of 5 stars`}>
       {Array.from({ length: 5 }).map((_, i) => {
         const filled = i + 1 <= Math.round(rating);
 
@@ -80,8 +68,8 @@ function StarRating({ rating }: { rating: number }) {
             width={13}
             height={13}
             viewBox="0 0 24 24"
-            fill={filled ? SIGNAL : "none"}
-            stroke={filled ? SIGNAL : emptyStroke}
+            fill={filled ? ORANGE : "none"}
+            stroke={filled ? ORANGE : colors.lineStrong}
             strokeWidth="1.5"
           >
             <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" />
@@ -127,17 +115,11 @@ function getColours(product: Product) {
       seen.add(colour);
       return true;
     })
-    .map((variant) => ({
-      name: variant.colour as string,
-    }));
+    .map((variant) => ({ name: variant.colour as string }));
 }
 
-export default function ProductCard({
-  product,
-}: {
-  product: Product;
-}) {
-  const { colors } = useTheme();
+export default function ProductCard({ product }: { product: Product }) {
+  const colors = usePalette();
 
   const fromPrice = getFromPrice(product);
   const colours = getColours(product);
@@ -146,26 +128,17 @@ export default function ProductCard({
   const extraCount = colours.length - visibleColours.length;
 
   return (
-    <Link
-      href={`/products/${product.productId}`}
-      className="group block"
-    >
+    <Link href={`/products/${product.productId}`} className="group block">
       <div
-        className="relative aspect-[4/5] overflow-hidden border"
-        style={{
-          borderColor: colors.line,
-          backgroundColor: colors.panel,
-        }}
+        className="relative aspect-[4/5] overflow-hidden"
+        style={{ backgroundColor: colors.panel }}
       >
-        <CardImg
-          src={product.productImage ?? ""}
-          alt={product.productName}
-        />
+        <CardImg src={product.productImage ?? ""} alt={product.productName} />
       </div>
 
       <div className="mt-3">
         <h3
-          className="line-clamp-2 text-sm font-medium leading-snug"
+          className="line-clamp-2 text-sm font-semibold leading-snug"
           style={{ color: colors.text }}
         >
           {product.productName}
@@ -174,34 +147,24 @@ export default function ProductCard({
         <div className="mt-1.5 flex items-center gap-2">
           <StarRating rating={product.rating ?? 0} />
 
-          <span
-            className="font-mono text-[10px]"
-            style={{ color: colors.textMuted }}
-          >
+          <span className="text-[11px]" style={{ color: colors.textMuted }}>
             ({product.reviewCount ?? 0})
           </span>
         </div>
 
-        <div
-          className="mt-1 font-mono text-sm"
-          style={{ color: SIGNAL }}
-        >
+        <div className="mt-1 text-sm font-semibold" style={{ color: ORANGE }}>
           {fromPrice !== null
             ? `From ₹${fromPrice.toLocaleString("en-IN")}`
             : "Price unavailable"}
         </div>
 
         {visibleColours.length > 0 && (
-          <div
-            className="mt-2.5 flex items-center gap-1.5"
-            /* Let colour chips wrap on narrow cards instead of overflowing (added) */
-            style={{ flexWrap: "wrap" }}
-          >
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             {visibleColours.map((colour) => (
               <span
                 key={colour.name}
                 title={colour.name}
-                className="flex h-4 items-center rounded-full border px-1.5 font-mono text-[8px]"
+                className="flex h-5 items-center rounded-full border px-2 text-[10px] uppercase tracking-wider"
                 style={{
                   borderColor: colors.lineStrong,
                   color: colors.textMuted,
@@ -212,10 +175,7 @@ export default function ProductCard({
             ))}
 
             {extraCount > 0 && (
-              <span
-                className="font-mono text-[9px]"
-                style={{ color: colors.textMuted }}
-              >
+              <span className="text-[10px]" style={{ color: colors.textMuted }}>
                 +{extraCount}
               </span>
             )}

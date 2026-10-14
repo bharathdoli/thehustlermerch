@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
+import { ORANGE, usePalette } from "@/src/lib/palette";
 import { useToast } from "@/src/context/ToastContext";
 
 type OrderListItem = {
@@ -26,7 +26,7 @@ function formatDate(value: string) {
 }
 
 export default function OrdersPage() {
-  const { colors } = useTheme();
+  const colors = usePalette();
   const toast = useToast();
 
   const [orders, setOrders] = useState<OrderListItem[]>([]);
@@ -48,20 +48,15 @@ export default function OrdersPage() {
         const data = await response.json().catch(() => null);
 
         if (!response.ok) {
-          throw new Error(
-            data?.message || data?.error || "Failed to load orders."
-          );
+          throw new Error(data?.message || data?.error || "Failed to load orders.");
         }
 
         setOrders(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Failed to load orders:", err);
-        setError(
-          err instanceof Error ? err.message : "Failed to load orders."
-        );
-        toast.error(
-          err instanceof Error ? err.message : "Failed to load orders."
-        );
+        const message = err instanceof Error ? err.message : "Failed to load orders.";
+        setError(message);
+        toast.error(message);
       } finally {
         setLoading(false);
       }
@@ -70,111 +65,104 @@ export default function OrdersPage() {
     loadOrders();
   }, []);
 
+  const primaryBtnStyle = { backgroundColor: colors.text, color: colors.bg };
+
   return (
-    <div className="mx-auto max-w-5xl overflow-x-hidden px-5 py-10 sm:px-8 sm:py-14">
-      <div className="border-b pb-6" style={{ borderColor: colors.line }}>
+    <div style={{ backgroundColor: colors.bg, color: colors.text }} className="min-h-[70vh]">
+      <div className="mx-auto max-w-3xl overflow-x-hidden px-4 py-10 sm:px-8 sm:py-16">
         <span
-          className="font-mono text-[11px] tracking-[0.25em]"
-          style={{ color: SIGNAL }}
+          className="text-[11px] font-medium uppercase tracking-[0.25em]"
+          style={{ color: ORANGE }}
         >
-          Account
+          Your account
         </span>
 
         <h1
-          className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-5xl"
+          className="mt-1.5 font-display text-4xl font-black uppercase leading-[0.95] tracking-[-0.03em] sm:text-6xl"
           style={{ color: colors.text }}
         >
-          Your Orders
+          Your orders
         </h1>
-      </div>
 
-      {error && (
-        <div
-          className="mt-6 break-words border p-4 font-mono text-xs"
-          style={{ borderColor: SIGNAL, color: SIGNAL }}
-        >
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div
-          className="mt-8 border p-6 text-center font-mono text-xs"
-          style={{ borderColor: colors.line, color: colors.textMuted }}
-        >
-          Loading orders...
-        </div>
-      ) : orders.length === 0 ? (
-        <div
-          className="mt-8 border p-6 text-center sm:p-10"
-          style={{ borderColor: colors.line }}
-        >
-          <p className="text-sm" style={{ color: colors.textMuted }}>
-            You haven't placed any orders yet.
-          </p>
-
-          <Link
-            href="/products"
-            className="mt-5 inline-block px-7 py-3 font-mono text-xs font-bold uppercase tracking-widest"
-            style={{ backgroundColor: SIGNAL, color: "#131210" }}
+        {error && (
+          <div
+            className="mt-6 break-words border p-4 text-xs"
+            style={{ borderColor: ORANGE, color: ORANGE }}
           >
-            Browse Products
-          </Link>
-        </div>
-      ) : (
-        <div className="mt-8 grid grid-cols-1 gap-3">
-          {orders.map((order) => {
-            const itemCount = order.items?.length ?? 0;
+            {error}
+          </div>
+        )}
 
-            return (
-              <Link
-                key={order.orderId}
-                href={`/orders/${order.orderId}`}
-                className="block border p-4 transition hover:opacity-80 sm:p-5"
-                style={{
-                  borderColor: colors.line,
-                  backgroundColor: colors.panel,
-                }}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p
-                      className="break-all font-mono text-[11px]"
-                      style={{ color: colors.textMuted }}
-                    >
-                      Order #{order.orderId.slice(0, 8)}
-                    </p>
+        {loading ? (
+          <div
+            className="mt-8 p-6 text-center text-sm"
+            style={{ backgroundColor: colors.panel, color: colors.textMuted }}
+          >
+            Loading orders...
+          </div>
+        ) : orders.length === 0 ? (
+          <div
+            className="mt-8 p-6 text-center sm:p-10"
+            style={{ backgroundColor: colors.panel }}
+          >
+            <p className="text-sm" style={{ color: colors.textMuted }}>
+              You haven&apos;t placed any orders yet.
+            </p>
 
-                    <p
-                      className="mt-1 text-sm"
-                      style={{ color: colors.text }}
-                    >
-                      {itemCount} item{itemCount !== 1 ? "s" : ""} ·{" "}
-                      {formatDate(order.createdAt)}
-                    </p>
+            <Link
+              href="/products"
+              className="mt-6 inline-block px-8 py-4 text-xs font-semibold uppercase tracking-[0.2em] transition hover:opacity-80"
+              style={primaryBtnStyle}
+            >
+              Browse products
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-8 grid grid-cols-1 gap-3">
+            {orders.map((order) => {
+              const itemCount = order.items?.length ?? 0;
+
+              return (
+                <Link
+                  key={order.orderId}
+                  href={`/orders/${order.orderId}`}
+                  className="block p-4 transition hover:opacity-80 sm:p-5"
+                  style={{ backgroundColor: colors.panel }}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p
+                        className="break-all text-[11px] font-medium uppercase tracking-[0.2em]"
+                        style={{ color: colors.textMuted }}
+                      >
+                        Order #{order.orderId.slice(0, 8)}
+                      </p>
+
+                      <p className="mt-1 text-sm" style={{ color: colors.text }}>
+                        {itemCount} item{itemCount !== 1 ? "s" : ""} ·{" "}
+                        {formatDate(order.createdAt)}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                      <span
+                        className="border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]"
+                        style={{ borderColor: ORANGE, color: ORANGE }}
+                      >
+                        {order.status}
+                      </span>
+
+                      <span className="text-sm font-semibold" style={{ color: colors.text }}>
+                        {fmt(Number(order.totalAmount))}
+                      </span>
+                    </div>
                   </div>
-
-                  <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-                    <span
-                      className="border px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-widest"
-                      style={{ borderColor: SIGNAL, color: SIGNAL }}
-                    >
-                      {order.status}
-                    </span>
-
-                    <span
-                      className="font-mono text-sm font-bold"
-                      style={{ color: colors.text }}
-                    >
-                      {fmt(Number(order.totalAmount))}
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      )}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

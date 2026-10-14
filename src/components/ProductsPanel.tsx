@@ -2,6 +2,23 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useToast } from "@/src/context/ToastContext";
+import {
+  ORANGE,
+  colors,
+  Field,
+  adminFormClass,
+  adminFormStyle,
+  adminInputClass,
+  adminInputStyle,
+  adminCellInputClass,
+  adminPrimaryBtnClass,
+  adminPrimaryBtnStyle,
+  adminRowBtnClass,
+  adminThClass,
+  adminThStyle,
+  adminHeadRowStyle,
+  adminRowStyle,
+} from "@/src/components/AdminUi";
 
 type Category = { categoryId: string; categoryName: string };
 type Product = {
@@ -139,7 +156,6 @@ export default function ProductsPanel() {
       await fetchAll();
       toast.success("Product updated.");
     } catch (err) {
-      // alert(err instanceof Error ? err.message : "Failed to update product.");
       toast.error(err instanceof Error ? err.message : "Failed to update product.");
     } finally {
       setSavingEdit(false);
@@ -158,7 +174,6 @@ export default function ProductsPanel() {
       await fetchAll();
       toast.success("Product deleted.");
     } catch (err) {
-      // alert(err instanceof Error ? err.message : "Failed to delete product.");
       toast.error(err instanceof Error ? err.message : "Failed to delete product.");
     } finally {
       setDeletingId(null);
@@ -167,14 +182,14 @@ export default function ProductsPanel() {
 
   return (
     <div className="w-full min-w-0">
-      <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3 border border-black/10 p-4">
-        <div className="min-w-[160px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Category</label>
+      <form onSubmit={handleCreate} className={adminFormClass} style={adminFormStyle}>
+        <Field label="Category" className="min-w-[160px]">
           <select
             required
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           >
             <option value="">Select...</option>
             {categories.map((c) => (
@@ -183,37 +198,36 @@ export default function ProductsPanel() {
               </option>
             ))}
           </select>
-        </div>
-        <div className="flex-1 min-w-[180px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Product name</label>
+        </Field>
+        <Field label="Product name" className="min-w-[180px] flex-1">
           <input
             required
             value={productName}
             onChange={(e) => setProductName(e.target.value)}
             placeholder="e.g. Canvas Tote"
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           />
-        </div>
-        <div className="flex-1 min-w-[220px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Description (optional)</label>
+        </Field>
+        <Field label="Description (optional)" className="min-w-[220px] flex-1">
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Short description"
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           />
-        </div>
-        <div className="flex-1 min-w-[220px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Image URL (optional)</label>
+        </Field>
+        <Field label="Image URL (optional)" className="min-w-[220px] flex-1">
           <input
             value={productImage}
             onChange={(e) => setProductImage(e.target.value)}
             placeholder="https://..."
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           />
-        </div>
-        <div className="min-w-[100px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Rating (optional)</label>
+        </Field>
+        <Field label="Rating (optional)" className="min-w-[100px]">
           <input
             type="number"
             step="0.1"
@@ -222,11 +236,11 @@ export default function ProductsPanel() {
             value={rating}
             onChange={(e) => setRating(e.target.value)}
             placeholder="4.5"
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           />
-        </div>
-        <div className="min-w-[120px] max-w-full">
-          <label className="block font-mono text-[10px] uppercase tracking-widest opacity-60">Review count</label>
+        </Field>
+        <Field label="Review count" className="min-w-[120px]">
           <input
             type="number"
             step="1"
@@ -234,145 +248,185 @@ export default function ProductsPanel() {
             value={reviewCount}
             onChange={(e) => setReviewCount(e.target.value)}
             placeholder="0"
-            className="mt-1 w-full border border-black/20 px-3 py-2 text-sm focus:outline-none"
+            className={adminInputClass}
+            style={adminInputStyle}
           />
-        </div>
+        </Field>
         <button
           type="submit"
           disabled={creating}
-          className="px-5 py-2 font-mono text-xs font-bold uppercase tracking-widest bg-orange-500 text-black disabled:opacity-50
-            w-full min-h-[40px] sm:w-auto"
+          className={adminPrimaryBtnClass}
+          style={adminPrimaryBtnStyle}
         >
-          {creating ? "Adding..." : "Add Product"}
+          {creating ? "Adding..." : "Add product"}
         </button>
       </form>
-      {createError && <p className="mt-2 font-mono text-xs text-red-600">{createError}</p>}
+      {createError && (
+        <p className="mt-2 text-xs" style={{ color: ORANGE }}>
+          {createError}
+        </p>
+      )}
 
       <div className="mt-6">
-        {loading && <p className="text-sm opacity-60">Loading products...</p>}
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {loading && (
+          <p className="text-sm" style={{ color: colors.textMuted }}>
+            Loading products...
+          </p>
+        )}
+        {error && (
+          <p className="text-sm" style={{ color: ORANGE }}>
+            {error}
+          </p>
+        )}
 
         {!loading && !error && (
           <div className="w-full overflow-x-auto">
-          <table
-            className="w-full border-collapse text-sm
-              min-w-[900px]"
-          >
-            <thead>
-              <tr className="border-b border-black/10 text-left font-mono text-[10px] uppercase tracking-widest opacity-60">
-                <th className="py-2">Name</th>
-                <th className="py-2">Category</th>
-                <th className="py-2">Description</th>
-                <th className="py-2">Image</th>
-                <th className="py-2">Rating</th>
-                <th className="py-2">Reviews</th>
-                <th className="py-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((p) => (
-                <tr key={p.productId} className="border-b border-black/5">
-                  {editingId === p.productId ? (
-                    <>
-                      <td className="py-2 pr-3">
-                        <input
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          className="w-full border border-black/20 px-2 py-1 text-sm focus:outline-none"
-                        />
-                      </td>
-                      <td className="py-2 pr-3 opacity-60">{categoryName(p.categoryId)}</td>
-                      <td className="py-2 pr-3">
-                        <input
-                          value={editDescription}
-                          onChange={(e) => setEditDescription(e.target.value)}
-                          className="w-full border border-black/20 px-2 py-1 text-sm focus:outline-none"
-                        />
-                      </td>
-                      <td className="py-2 pr-3">
-                        <input
-                          value={editImage}
-                          onChange={(e) => setEditImage(e.target.value)}
-                          placeholder="https://..."
-                          className="w-full border border-black/20 px-2 py-1 text-sm focus:outline-none"
-                        />
-                      </td>
-                      <td className="py-2 pr-3">
-                        <input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="5"
-                          value={editRating}
-                          onChange={(e) => setEditRating(e.target.value)}
-                          className="w-16 border border-black/20 px-2 py-1 text-sm focus:outline-none"
-                        />
-                      </td>
-                      <td className="py-2 pr-3">
-                        <input
-                          type="number"
-                          step="1"
-                          min="0"
-                          value={editReviewCount}
-                          onChange={(e) => setEditReviewCount(e.target.value)}
-                          className="w-16 border border-black/20 px-2 py-1 text-sm focus:outline-none"
-                        />
-                      </td>
-                      <td className="py-2 text-right space-x-2
-                        whitespace-nowrap">
-                        <button
-                          onClick={() => saveEdit(p.productId)}
-                          disabled={savingEdit}
-                          className="font-mono text-[10px] uppercase tracking-widest text-orange-600
-                            min-h-[32px]"
-                        >
-                          Save
-                        </button>
-                        <button onClick={() => { setEditingId(null); toast.info("Edit cancelled."); }} className="font-mono text-[10px] uppercase tracking-widest opacity-60
-                          min-h-[32px]">
-                          Cancel
-                        </button>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="py-2 pr-3">{p.productName}</td>
-                      <td className="py-2 pr-3 opacity-70">{categoryName(p.categoryId)}</td>
-                      <td className="py-2 pr-3 opacity-70">{p.description || "—"}</td>
-                      <td className="py-2 pr-3 opacity-70">
-                        {p.productImage ? (
-                          <img src={p.productImage} alt={p.productName} className="h-8 w-8 object-cover" />
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="py-2 pr-3 opacity-70">{p.rating ?? "—"}</td>
-                      <td className="py-2 pr-3 opacity-70">{p.reviewCount ?? "—"}</td>
-                      <td className="py-2 text-right space-x-3
-                        whitespace-nowrap">
-                        <button onClick={() => startEdit(p)} className="font-mono text-[10px] uppercase tracking-widest text-orange-600
-                          min-h-[32px]">
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(p.productId)}
-                          disabled={deletingId === p.productId}
-                          className="font-mono text-[10px] uppercase tracking-widest text-red-600 disabled:opacity-50
-                            min-h-[32px]"
-                        >
-                          {deletingId === p.productId ? "Deleting..." : "Delete"}
-                        </button>
-                      </td>
-                    </>
-                  )}
+            <table className="w-full min-w-[900px] border-collapse text-sm">
+              <thead>
+                <tr className="text-left" style={adminHeadRowStyle}>
+                  <th className={adminThClass} style={adminThStyle}>Name</th>
+                  <th className={adminThClass} style={adminThStyle}>Category</th>
+                  <th className={adminThClass} style={adminThStyle}>Description</th>
+                  <th className={adminThClass} style={adminThStyle}>Image</th>
+                  <th className={adminThClass} style={adminThStyle}>Rating</th>
+                  <th className={adminThClass} style={adminThStyle}>Reviews</th>
+                  <th className={`${adminThClass} text-right`} style={adminThStyle}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {products.map((p) => (
+                  <tr key={p.productId} style={adminRowStyle}>
+                    {editingId === p.productId ? (
+                      <>
+                        <td className="py-2 pr-3">
+                          <input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className={adminCellInputClass}
+                            style={adminInputStyle}
+                          />
+                        </td>
+                        <td className="py-2 pr-3" style={{ color: colors.textMuted }}>
+                          {categoryName(p.categoryId)}
+                        </td>
+                        <td className="py-2 pr-3">
+                          <input
+                            value={editDescription}
+                            onChange={(e) => setEditDescription(e.target.value)}
+                            className={adminCellInputClass}
+                            style={adminInputStyle}
+                          />
+                        </td>
+                        <td className="py-2 pr-3">
+                          <input
+                            value={editImage}
+                            onChange={(e) => setEditImage(e.target.value)}
+                            placeholder="https://..."
+                            className={adminCellInputClass}
+                            style={adminInputStyle}
+                          />
+                        </td>
+                        <td className="py-2 pr-3">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="5"
+                            value={editRating}
+                            onChange={(e) => setEditRating(e.target.value)}
+                            className={`${adminCellInputClass} !w-16`}
+                            style={adminInputStyle}
+                          />
+                        </td>
+                        <td className="py-2 pr-3">
+                          <input
+                            type="number"
+                            step="1"
+                            min="0"
+                            value={editReviewCount}
+                            onChange={(e) => setEditReviewCount(e.target.value)}
+                            className={`${adminCellInputClass} !w-16`}
+                            style={adminInputStyle}
+                          />
+                        </td>
+                        <td className="space-x-3 whitespace-nowrap py-2 text-right">
+                          <button
+                            onClick={() => saveEdit(p.productId)}
+                            disabled={savingEdit}
+                            className={adminRowBtnClass}
+                            style={{ color: ORANGE }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingId(null);
+                              toast.info("Edit cancelled.");
+                            }}
+                            className={adminRowBtnClass}
+                            style={{ color: colors.textMuted }}
+                          >
+                            Cancel
+                          </button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-2 pr-3 font-medium">{p.productName}</td>
+                        <td className="py-2 pr-3" style={{ color: colors.textMuted }}>
+                          {categoryName(p.categoryId)}
+                        </td>
+                        <td className="py-2 pr-3" style={{ color: colors.textMuted }}>
+                          {p.description || "—"}
+                        </td>
+                        <td className="py-2 pr-3" style={{ color: colors.textMuted }}>
+                          {p.productImage ? (
+                            <img
+                              src={p.productImage}
+                              alt={p.productName}
+                              className="h-8 w-8 object-cover"
+                            />
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="py-2 pr-3" style={{ color: colors.textMuted }}>
+                          {p.rating ?? "—"}
+                        </td>
+                        <td className="py-2 pr-3" style={{ color: colors.textMuted }}>
+                          {p.reviewCount ?? "—"}
+                        </td>
+                        <td className="space-x-3 whitespace-nowrap py-2 text-right">
+                          <button
+                            onClick={() => startEdit(p)}
+                            className={adminRowBtnClass}
+                            style={{ color: colors.text }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.productId)}
+                            disabled={deletingId === p.productId}
+                            className={adminRowBtnClass}
+                            style={{ color: ORANGE }}
+                          >
+                            {deletingId === p.productId ? "Deleting..." : "Delete"}
+                          </button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
-        {!loading && !error && products.length === 0 && <p className="mt-4 text-sm opacity-60">No products yet.</p>}
+        {!loading && !error && products.length === 0 && (
+          <p className="mt-4 text-sm" style={{ color: colors.textMuted }}>
+            No products yet.
+          </p>
+        )}
       </div>
     </div>
   );

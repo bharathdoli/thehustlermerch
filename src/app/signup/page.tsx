@@ -4,12 +4,10 @@ import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { SIGNAL, useTheme } from "@/src/context/ThemeContext";
+import { ORANGE, usePalette } from "@/src/lib/palette";
 import { useToast } from "@/src/context/ToastContext";
 
 const PENDING_CART_KEY = "hustler-pending-cart-item";
-// const API_BASE_URL =
-//   process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 function SignupForm() {
   const router = useRouter();
@@ -17,7 +15,7 @@ function SignupForm() {
 
   const redirectTo = searchParams.get("redirect") || "/";
 
-  const { colors } = useTheme();
+  const colors = usePalette();
   const toast = useToast();
 
   const [name, setName] = useState("");
@@ -40,9 +38,7 @@ function SignupForm() {
           const response = await fetch("/api/cart", {
             method: "POST",
             credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               variantId: item.variantId,
               quantity: item.quantity,
@@ -76,7 +72,7 @@ function SignupForm() {
     e.preventDefault();
     setError("");
 
-    // Extra: required-field check (needed because the form uses noValidate)
+    // Required-field check (needed because the form uses noValidate)
     if (!name.trim() || !email.trim() || !phoneNo.trim() || !password) {
       setError("Please fill in all the fields.");
       toast.error("Please fill in all the fields.");
@@ -89,7 +85,6 @@ function SignupForm() {
       return;
     }
 
-    // Extra validation
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
       toast.error("Password must be at least 8 characters.");
@@ -107,71 +102,41 @@ function SignupForm() {
     /*
      * Register the user.
      *
-     * IMPORTANT:
-     * Do NOT send a role from the frontend.
-     * The backend must always create public registrations
-     * as "Customer".
+     * IMPORTANT: do NOT send a role from the frontend.
+     * The backend must always create public registrations as "Customer".
      */
     try {
       const res = await fetch(`/api/users/register`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name,
-          email,
-          password,
-          phoneNo,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password, phoneNo }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
         // Zod validation errors
-        if (data.errors) {
-          const firstField = Object.keys(data.errors)[0];
-          const firstMessage = data.errors[firstField]?.[0];
+        const firstFieldMessage = data.errors
+          ? data.errors[Object.keys(data.errors)[0]]?.[0]
+          : undefined;
 
-          setError(
-            firstMessage ??
-            data.message ??
-            "Something went wrong."
-          );
-        } else {
-          setError(
-            data.message ??
-            "Something went wrong."
-          );
-        }
+        const message = firstFieldMessage ?? data.message ?? "Something went wrong.";
 
-        toast.error(
-          (data.errors &&
-            data.errors[Object.keys(data.errors)[0]]?.[0]) ||
-            data.message ||
-            "Something went wrong."
-        );
-
+        setError(message);
+        toast.error(message);
         setLoading(false);
         return;
       }
     } catch {
-      setError(
-        "Could not reach the server. Please try again."
-      );
-
+      setError("Could not reach the server. Please try again.");
       toast.error("Could not reach the server. Please try again.");
-
       setLoading(false);
       return;
     }
 
     toast.success("Account created successfully.");
 
-    /*
-     * Automatically log the newly created customer in.
-     */
+    // Automatically log the newly created customer in.
     const result = await signIn("credentials", {
       email,
       password,
@@ -184,10 +149,7 @@ function SignupForm() {
       setError("Account created. Please log in.");
       toast.info("Account created. Please log in.");
 
-      router.push(
-        `/login?redirect=${encodeURIComponent(redirectTo)}`
-      );
-
+      router.push(`/login?redirect=${encodeURIComponent(redirectTo)}`);
       return;
     }
 
@@ -196,316 +158,147 @@ function SignupForm() {
     completeRedirect();
   }
 
+  const labelClass = "text-[11px] font-medium uppercase tracking-[0.2em]";
+  const inputClass =
+    "mt-2 w-full border px-4 py-3 text-base outline-none transition focus:border-[#0e0e0e] sm:text-sm";
+  const inputStyle = {
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.bg,
+    color: colors.text,
+  };
+
+  const fields: {
+    id: string;
+    label: string;
+    type: string;
+    value: string;
+    set: (v: string) => void;
+    placeholder: string;
+    autoComplete: string;
+  }[] = [
+    {
+      id: "signup-name",
+      label: "Full name",
+      type: "text",
+      value: name,
+      set: setName,
+      placeholder: "Your name",
+      autoComplete: "name",
+    },
+    {
+      id: "signup-email",
+      label: "Email",
+      type: "email",
+      value: email,
+      set: setEmail,
+      placeholder: "you@email.com",
+      autoComplete: "email",
+    },
+    {
+      id: "signup-phone",
+      label: "Phone number",
+      type: "tel",
+      value: phoneNo,
+      set: setPhoneNo,
+      placeholder: "10-digit mobile number",
+      autoComplete: "tel",
+    },
+    {
+      id: "signup-password",
+      label: "Password",
+      type: "password",
+      value: password,
+      set: setPassword,
+      placeholder: "At least 8 characters",
+      autoComplete: "new-password",
+    },
+    {
+      id: "signup-confirm-password",
+      label: "Confirm password",
+      type: "password",
+      value: confirmPassword,
+      set: setConfirmPassword,
+      placeholder: "Re-enter password",
+      autoComplete: "new-password",
+    },
+  ];
+
   return (
     <div
-      className="
-        mx-auto
-        flex
-        min-h-[70vh]
-        w-full
-        max-w-md
-        flex-col
-        justify-center
-        overflow-x-hidden
-        px-4
-        py-10
-        sm:px-8
-        sm:py-16
-      "
+      className="flex min-h-[70vh] w-full flex-col justify-center"
+      style={{ backgroundColor: colors.bg, color: colors.text }}
     >
-      {/* Heading */}
-      <span
-        className="font-mono text-[11px] tracking-[0.25em]"
-        style={{ color: SIGNAL }}
-      >
-        Join the crew
-      </span>
-
-      <h1
-        className="
-          mt-2
-          font-display
-          text-3xl
-          uppercase
-          tracking-tight
-          sm:text-4xl
-        "
-        style={{ color: colors.text }}
-      >
-        Sign Up
-      </h1>
-
-      <form
-        onSubmit={handleSubmit}
-        className="mt-6 space-y-4"
-        noValidate
-      >
-        {/* Full Name */}
-        <div>
-          <label
-            htmlFor="signup-name"
-            className="
-              font-mono
-              text-[11px]
-              uppercase
-              tracking-widest
-            "
-            style={{ color: colors.textMuted }}
-          >
-            Full name
-          </label>
-
-          <input
-            id="signup-name"
-            type="text"
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Your name"
-            autoComplete="name"
-            className="
-              mt-2
-              w-full
-              border
-              px-4
-              py-3
-              text-base
-              sm:text-sm
-              focus:outline-none
-            "
-            style={{
-              borderColor: colors.lineStrong,
-              backgroundColor: colors.panel,
-              color: colors.text,
-            }}
-          />
-        </div>
-
-        {/* Email */}
-        <div>
-          <label
-            htmlFor="signup-email"
-            className="
-              font-mono
-              text-[11px]
-              uppercase
-              tracking-widest
-            "
-            style={{ color: colors.textMuted }}
-          >
-            Email
-          </label>
-
-          <input
-            id="signup-email"
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@email.com"
-            autoComplete="email"
-            className="
-              mt-2
-              w-full
-              border
-              px-4
-              py-3
-              text-base
-              sm:text-sm
-              focus:outline-none
-            "
-            style={{
-              borderColor: colors.lineStrong,
-              backgroundColor: colors.panel,
-              color: colors.text,
-            }}
-          />
-        </div>
-
-        {/* Phone */}
-        <div>
-          <label
-            htmlFor="signup-phone"
-            className="
-              font-mono
-              text-[11px]
-              uppercase
-              tracking-widest
-            "
-            style={{ color: colors.textMuted }}
-          >
-            Phone number
-          </label>
-
-          <input
-            id="signup-phone"
-            type="tel"
-            required
-            value={phoneNo}
-            onChange={(e) => setPhoneNo(e.target.value)}
-            placeholder="10-digit mobile number"
-            autoComplete="tel"
-            className="
-              mt-2
-              w-full
-              border
-              px-4
-              py-3
-              text-base
-              sm:text-sm
-              focus:outline-none
-            "
-            style={{
-              borderColor: colors.lineStrong,
-              backgroundColor: colors.panel,
-              color: colors.text,
-            }}
-          />
-        </div>
-
-        {/* Password */}
-        <div>
-          <label
-            htmlFor="signup-password"
-            className="
-              font-mono
-              text-[11px]
-              uppercase
-              tracking-widest
-            "
-            style={{ color: colors.textMuted }}
-          >
-            Password
-          </label>
-
-          <input
-            id="signup-password"
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="At least 8 characters"
-            autoComplete="new-password"
-            className="
-              mt-2
-              w-full
-              border
-              px-4
-              py-3
-              text-base
-              sm:text-sm
-              focus:outline-none
-            "
-            style={{
-              borderColor: colors.lineStrong,
-              backgroundColor: colors.panel,
-              color: colors.text,
-            }}
-          />
-        </div>
-
-        {/* Confirm Password */}
-        <div>
-          <label
-            htmlFor="signup-confirm-password"
-            className="
-              font-mono
-              text-[11px]
-              uppercase
-              tracking-widest
-            "
-            style={{ color: colors.textMuted }}
-          >
-            Confirm password
-          </label>
-
-          <input
-            id="signup-confirm-password"
-            type="password"
-            required
-            value={confirmPassword}
-            onChange={(e) =>
-              setConfirmPassword(e.target.value)
-            }
-            placeholder="Re-enter password"
-            autoComplete="new-password"
-            className="
-              mt-2
-              w-full
-              border
-              px-4
-              py-3
-              text-base
-              sm:text-sm
-              focus:outline-none
-            "
-            style={{
-              borderColor: colors.lineStrong,
-              backgroundColor: colors.panel,
-              color: colors.text,
-            }}
-          />
-        </div>
-
-        {/* Error */}
-        {error && (
-          <p
-            className="font-mono text-[11px]"
-            style={{ color: SIGNAL }}
-          >
-            {error}
-          </p>
-        )}
-
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="
-            w-full
-            py-3
-            py-3.5
-            font-mono
-            text-xs
-            font-bold
-            uppercase
-            tracking-widest
-            transition
-            hover:brightness-95
-            disabled:cursor-not-allowed
-            disabled:opacity-50
-          "
-          style={{
-            backgroundColor: SIGNAL,
-            color: "#131210",
-          }}
+      <div className="mx-auto flex w-full max-w-md flex-col overflow-x-hidden px-4 py-10 sm:px-8 sm:py-16">
+        <span
+          className="text-[11px] font-medium uppercase tracking-[0.25em]"
+          style={{ color: ORANGE }}
         >
-          {loading ? "Creating..." : "Create Account"}
-        </button>
-      </form>
+          Join the crew
+        </span>
 
-      {/* Login */}
-      <p
-        className="
-          mt-6
-          text-center
-          font-mono
-          text-[11px]
-        "
-        style={{ color: colors.textMuted }}
-      >
-        Already have an account?{" "}
-
-        <Link
-          href={`/login?redirect=${encodeURIComponent(
-            redirectTo
-          )}`}
-          style={{ color: SIGNAL }}
-          className="hover:underline"
+        <h1
+          className="mt-1.5 font-display text-4xl font-black uppercase leading-[0.95] tracking-[-0.03em] sm:text-6xl"
+          style={{ color: colors.text }}
         >
-          Log in
-        </Link>
-      </p>
+          Sign up
+        </h1>
+
+        <form
+          onSubmit={handleSubmit}
+          className="mt-8 space-y-5 p-5 sm:p-6"
+          style={{ backgroundColor: colors.panel }}
+          noValidate
+        >
+          {fields.map((field) => (
+            <div key={field.id}>
+              <label
+                htmlFor={field.id}
+                className={labelClass}
+                style={{ color: colors.textMuted }}
+              >
+                {field.label}
+              </label>
+              <input
+                id={field.id}
+                type={field.type}
+                required
+                value={field.value}
+                onChange={(e) => field.set(e.target.value)}
+                placeholder={field.placeholder}
+                autoComplete={field.autoComplete}
+                className={inputClass}
+                style={inputStyle}
+              />
+            </div>
+          ))}
+
+          {error && (
+            <p className="text-xs" style={{ color: ORANGE }}>
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full px-8 py-4 text-xs font-semibold uppercase tracking-[0.2em] transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: colors.text, color: colors.bg }}
+          >
+            {loading ? "Creating..." : "Create account"}
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-xs" style={{ color: colors.textMuted }}>
+          Already have an account?{" "}
+          <Link
+            href={`/login?redirect=${encodeURIComponent(redirectTo)}`}
+            style={{ color: ORANGE }}
+            className="font-medium hover:underline"
+          >
+            Log in
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

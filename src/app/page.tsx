@@ -1,22 +1,10 @@
 "use client";
 
 /**
- * TheHustlerMerchandise — Home Page (v7 — toasts + full responsive pass)
- * -----------------------------------------------------------------------
- * Theme (dark/light + SIGNAL orange) lives in
- * `src/context/ThemeContext.tsx` and is shared with every other page.
- *
- * Categories:  GET /api/categories
- * Products:    GET /api/products
- *
- * v7 changes (search for "TOAST" and "RESPONSIVE" comments):
- *  - Self-contained toast system (ToastProvider / useToast / ToastViewport)
- *  - Toasts on: category load error, product load error, newsletter
- *    validation + success, track-order login prompt, contact form
- *    success / error
- *  - Responsive fixes across Hero, SectionHeading, ProductCard,
- *    BestProducts, Instagram, Contact, Footer
- * -----------------------------------------------------------------------
+ * TheHustlerMerchandise — Home Page (v8 — editorial redesign)
+ * Hero slider · Categories · New Arrivals · Bestsellers ·
+ * Instagram · Testimonials · Newsletter · Footer
+ * Data: GET /api/categories, GET /api/products (unchanged).
  */
 
 import {
@@ -29,17 +17,16 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { SIGNAL, hexToRgba, useTheme } from "@/src/context/ThemeContext";
+import { ORANGE, usePalette } from "@/src/lib/palette";
 
-/* -------------------------------------------------------------------- */
-/*  Data types                                                          */
-/* -------------------------------------------------------------------- */
+/* ------------------------------ Types ------------------------------ */
 
 type ProductVariant = {
   variantId?: string;
   colour?: string;
   size?: string;
   price: number;
+  comparePrice?: number | null; // optional: original price, enables "% off"
   stockQuantity?: number;
 };
 
@@ -47,25 +34,12 @@ type Product = {
   productId: string;
   categoryId?: string;
   productName: string;
-  description?: string | null;
   productImage?: string | null;
   rating?: number;
   reviewCount?: number;
   variants?: ProductVariant[];
 };
 
-type Review = {
-  id: string;
-  author: string;
-  rating: number;
-  text: string;
-  product: string;
-  location: string;
-  verified: boolean;
-  avatarSeed: string;
-};
-
-/* Live category shape — matches list-categories.usecase.ts */
 type CategoryDTO = {
   categoryId: string;
   categoryName: string;
@@ -73,61 +47,36 @@ type CategoryDTO = {
   imageUrl?: string | null;
 };
 
-/* -------------------------------------------------------------------- */
-/*  TOAST — provider, hook, viewport                                    */
-/* -------------------------------------------------------------------- */
+/* ------------------------------ Toasts ----------------------------- */
 
 type ToastType = "success" | "error" | "info";
-
-type ToastItem = {
-  id: number;
-  type: ToastType;
-  message: string;
-};
-
+type ToastItem = { id: number; type: ToastType; message: string };
 type ToastFn = (message: string, type?: ToastType) => void;
 
-const ToastContext = createContext<{ toast: ToastFn }>({
-  toast: () => {},
-});
-
-function useToast() {
-  return useContext(ToastContext);
-}
-
-const TOAST_DURATION_MS = 4500;
-const MAX_TOASTS = 3;
+const ToastContext = createContext<{ toast: ToastFn }>({ toast: () => {} });
+const useToast = () => useContext(ToastContext);
 
 function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
-  const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(
-    new Map()
-  );
+  const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   const dismiss = useCallback((id: number) => {
     const t = timers.current.get(id);
     if (t) clearTimeout(t);
     timers.current.delete(id);
-    setToasts((prev) => prev.filter((x) => x.id !== id));
+    setToasts((p) => p.filter((x) => x.id !== id));
   }, []);
 
   const toast = useCallback<ToastFn>(
     (message, type = "info") => {
       const id = ++idRef.current;
-
-      setToasts((prev) => {
-        // Don't stack identical messages (e.g. React strict-mode double effects)
-        if (prev.some((x) => x.message === message && x.type === type)) {
-          return prev;
-        }
-        return [...prev.slice(-(MAX_TOASTS - 1)), { id, type, message }];
-      });
-
-      timers.current.set(
-        id,
-        setTimeout(() => dismiss(id), TOAST_DURATION_MS)
+      setToasts((p) =>
+        p.some((x) => x.message === message && x.type === type)
+          ? p
+          : [...p.slice(-2), { id, type, message }]
       );
+      timers.current.set(id, setTimeout(() => dismiss(id), 4500));
     },
     [dismiss]
   );
@@ -140,221 +89,63 @@ function ToastProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const accent = (t: ToastType) =>
+    t === "error" ? "#ef4444" : t === "success" ? ORANGE : "#111";
+
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <ToastViewport toasts={toasts} onDismiss={dismiss} />
+      <div
+        aria-live="polite"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-[100] flex flex-col items-center gap-2 px-3 sm:items-end sm:px-6"
+        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
+      >
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            role={t.type === "error" ? "alert" : "status"}
+            className="pointer-events-auto flex w-full max-w-sm items-start gap-3 border-l-4 bg-[#111] px-4 py-3 text-sm text-white shadow-2xl sm:w-auto sm:min-w-[300px]"
+            style={{ borderLeftColor: accent(t.type) }}
+          >
+            <p className="flex-1 break-words leading-snug">{t.message}</p>
+            <button
+              type="button"
+              aria-label="Dismiss notification"
+              onClick={() => dismiss(t.id)}
+              className="shrink-0 px-1 text-base leading-none opacity-70 hover:opacity-100"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
     </ToastContext.Provider>
   );
 }
 
-function ToastViewport({
-  toasts,
-  onDismiss,
-}: {
-  toasts: ToastItem[];
-  onDismiss: (id: number) => void;
-}) {
-  const { colors } = useTheme();
+/* --------------------------- Shared pieces -------------------------- */
 
-  const accent = (type: ToastType) =>
-    type === "error" ? "#ef4444" : type === "success" ? SIGNAL : colors.lineStrong;
+const GREY = "#e6e6e6"; // product / category tile background
+const INK = "#0e0e0e";
 
-  const icon = (type: ToastType) =>
-    type === "error" ? "!" : type === "success" ? "✓" : "i";
-
-  return (
-    <div
-      aria-live="polite"
-      aria-atomic="false"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-[100] flex flex-col items-center gap-2 px-3 sm:items-end sm:px-6"
-      style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
-    >
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          role={t.type === "error" ? "alert" : "status"}
-          className="pointer-events-auto flex w-full max-w-sm animate-[toast-in_0.25s_ease-out_both] items-start gap-3 border-l-4 border px-4 py-3 shadow-2xl sm:w-auto sm:min-w-[300px]"
-          style={{
-            backgroundColor: colors.panel,
-            borderColor: colors.lineStrong,
-            borderLeftColor: accent(t.type),
-            color: colors.text,
-          }}
-        >
-          <span
-            aria-hidden
-            className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold"
-            style={{
-              backgroundColor: accent(t.type),
-              color: "#131210",
-            }}
-          >
-            {icon(t.type)}
-          </span>
-
-          <p className="flex-1 break-words text-sm leading-snug">
-            {t.message}
-          </p>
-
-          <button
-            type="button"
-            aria-label="Dismiss notification"
-            onClick={() => onDismiss(t.id)}
-            className="-mr-1 shrink-0 px-1 font-mono text-base leading-none transition hover:opacity-100"
-            style={{ color: colors.textMuted }}
-          >
-            ×
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------- */
-/*  Reviews — unchanged                                                 */
-/* -------------------------------------------------------------------- */
-
-const REVIEWS: Review[] = [
-  {
-    id: "r1",
-    author: "Aarav Mehta",
-    rating: 5,
-    text: "Heavier than anything from the mall brands. The hoodie held up through an entire winter of daily wear and still looks new.",
-    product: "Graveyard Shift Hoodie",
-    location: "Mumbai, MH",
-    verified: true,
-    avatarSeed: "aarav",
-  },
-  {
-    id: "r2",
-    author: "Simran Kaur",
-    rating: 5,
-    text: "Ordered custom prints for our whole team of 14. Proof came in a day, print matched it exactly, delivered in under a week.",
-    product: "Custom Merch",
-    location: "Chandigarh, PB",
-    verified: true,
-    avatarSeed: "simran",
-  },
-  {
-    id: "r3",
-    author: "Rohan Iyer",
-    rating: 4,
-    text: "Great fabric, sizing runs slightly large — go one size down. Otherwise exactly as pictured.",
-    product: "No Days Off Tee",
-    location: "Bengaluru, KA",
-    verified: true,
-    avatarSeed: "rohan",
-  },
-  {
-    id: "r4",
-    author: "Neha Kulkarni",
-    rating: 5,
-    text: "The cap is genuinely well built — stiff brim, no loose threads. Feels like it costs twice as much.",
-    product: "Site Foreman Cap",
-    location: "Pune, MH",
-    verified: true,
-    avatarSeed: "neha",
-  },
-  {
-    id: "r5",
-    author: "Karthik Reddy",
-    rating: 5,
-    text: "Small batch really shows. Stitching is clean and the print hasn't cracked after a dozen washes.",
-    product: "Overtime Crewneck",
-    location: "Hyderabad, TS",
-    verified: true,
-    avatarSeed: "karthik",
-  },
-  {
-    id: "r6",
-    author: "Ishita Bose",
-    rating: 4,
-    text: "Shipping took a day longer than quoted, but support kept me updated the whole way. Product's worth the wait.",
-    product: "Ledger Zip Hoodie",
-    location: "Kolkata, WB",
-    verified: true,
-    avatarSeed: "ishita",
-  },
-];
-
-/* -------------------------------------------------------------------- */
-/*  FAQ data                                                            */
-/* -------------------------------------------------------------------- */
-
-const FAQS: { q: string; a: string }[] = [
-  {
-    q: "How long does shipping take?",
-    a: "Standard orders ship within 5–7 business days across India. Custom merch orders may take slightly longer depending on print volume and proof approval time.",
-  },
-  {
-    q: "Can I get my own design printed?",
-    a: "Yes — head to the Custom Merch section, upload your artwork, and we'll send you a proof before anything goes to print. Minimum order is just 2 pieces.",
-  },
-  {
-    q: "What sizes do you offer?",
-    a: "Most product lines run from S through XXL. Check the Size Guide (linked in the footer) for detailed chest, length, and sleeve measurements per product.",
-  },
-  {
-    q: "What's your return and exchange policy?",
-    a: "Unworn, unwashed items can be returned or exchanged within 7 days of delivery. Full details are on the Returns & Exchanges page.",
-  },
-  {
-    q: "How do I track an existing order?",
-    a: "Log in and open the Orders page from your account, or use the Track Order link in the footer — it'll take you straight there if you're signed in.",
-  },
-  {
-    q: "Do you ship outside India?",
-    a: "Right now we only ship within India. We're working on international shipping — follow us on Instagram for updates.",
-  },
-];
-
-/* -------------------------------------------------------------------- */
-/*  Small shared bits                                                    */
-/* -------------------------------------------------------------------- */
-
-function Img({
-  src,
-  alt,
-  className,
-}: {
-  src: string;
-  alt: string;
-  className?: string;
-}) {
-  const { colors } = useTheme();
+function Img({ src, alt, className }: { src: string; alt: string; className?: string }) {
   const [failed, setFailed] = useState(false);
-
   if (failed || !src) {
     return (
       <div
         className={`${className ?? ""} flex items-center justify-center`}
-        style={{ backgroundColor: colors.panel }}
+        style={{ backgroundColor: GREY }}
       >
-        <span
-          className="px-2 text-center font-mono text-[9px] tracking-widest sm:text-[10px]"
-          style={{ color: colors.textMuted }}
-        >
+        <span className="px-2 text-center text-[10px] tracking-widest text-neutral-500">
           IMAGE UNAVAILABLE
         </span>
       </div>
     );
   }
-
-  return (
-    <img
-      src={src}
-      alt={alt}
-      className={className}
-      onError={() => setFailed(true)}
-      loading="lazy"
-    />
-  );
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt={alt} className={className} onError={() => setFailed(true)} loading="lazy" />;
 }
 
-/* RESPONSIVE: the "View all / Shop all" action is now visible on mobile too
-   (it used to be `hidden sm:block`), and the title block can shrink. */
 function SectionHeading({
   eyebrow,
   title,
@@ -362,1787 +153,739 @@ function SectionHeading({
 }: {
   eyebrow: string;
   title: string;
-  action?: { label: string; href: string };
+  action?: { label: string; href: string; plain?: boolean };
 }) {
-  const { colors } = useTheme();
-
+  const colors = usePalette();
   return (
-    <div
-      className="mb-6 flex items-end justify-between gap-3 border-b pb-4 sm:mb-8 sm:gap-4 sm:pb-5"
-      style={{ borderColor: colors.line }}
-    >
+    <div className="mb-6 flex items-end justify-between gap-4 sm:mb-8">
       <div className="min-w-0">
         <span
-          className="font-mono text-[10px] tracking-[0.25em] sm:text-[11px]"
-          style={{ color: SIGNAL }}
+          className="text-[11px] font-medium uppercase tracking-[0.25em]"
+          style={{ color: ORANGE }}
         >
           {eyebrow}
         </span>
         <h2
-          className="mt-2 font-display text-2xl uppercase tracking-tight min-[400px]:text-3xl sm:text-4xl"
+          className="mt-1.5 font-display text-4xl font-black uppercase leading-[0.95] tracking-[-0.03em] sm:text-6xl"
           style={{ color: colors.text }}
         >
           {title}
         </h2>
       </div>
-      {action && (
-        <a
-          href={action.href}
-          className="shrink-0 whitespace-nowrap pb-1 font-mono text-[10px] uppercase tracking-widest transition hover:opacity-100 sm:text-xs"
-          style={{ color: colors.textMuted }}
-        >
-          {action.label} →
-        </a>
-      )}
-    </div>
-  );
-}
-
-function StarRating({
-  rating,
-  size = 14,
-}: {
-  rating: number;
-  size?: number;
-}) {
-  const { theme } = useTheme();
-  const emptyStroke = theme === "dark" ? "#5a5648" : "#c9c1af";
-
-  return (
-    <div
-      className="flex items-center gap-0.5"
-      aria-label={`${rating} out of 5 stars`}
-    >
-      {Array.from({ length: 5 }).map((_, i) => {
-        const filled = i + 1 <= Math.round(rating);
-
-        return (
-          <svg
-            key={i}
-            width={size}
-            height={size}
-            viewBox="0 0 24 24"
-            fill={filled ? SIGNAL : "none"}
-            stroke={filled ? SIGNAL : emptyStroke}
-            strokeWidth="1.5"
-          >
-            <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" />
-          </svg>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Diagonal hazard-stripe rule — unchanged */
-function HazardRule({ className = "" }: { className?: string }) {
-  const { colors } = useTheme();
-
-  return (
-    <div
-      className={`h-2 w-full ${className}`}
-      style={{
-        backgroundImage: `repeating-linear-gradient(135deg, ${SIGNAL} 0 10px, ${colors.bg} 10px 20px)`,
-      }}
-    />
-  );
-}
-
-function Ticker() {
-  const { colors } = useTheme();
-
-  const items = [
-    "NO DAYS OFF",
-    "SELF MADE",
-    "GRIND MODE: ON",
-    "BUILT NOT GIVEN",
-    "EAT THE COMPETITION",
-    "24 / 7 MINDSET",
-  ];
-
-  const loop = [...items, ...items];
-
-  return (
-    <div>
-      <HazardRule />
-
-      <div
-        className="relative overflow-hidden py-3"
-        style={{ backgroundColor: colors.panel }}
-      >
-        <div className="flex w-max animate-[marquee_28s_linear_infinite] gap-6 whitespace-nowrap sm:gap-10">
-          {loop.map((item, i) => (
-            <span
-              key={i}
-              className="flex items-center gap-6 font-mono text-[10px] tracking-[0.25em] sm:gap-10 sm:text-xs"
-              style={{ color: colors.textMuted }}
-            >
-              {item}
-              <span style={{ color: SIGNAL }}>✦</span>
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <HazardRule />
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------- */
-/*  Hero                                                                 */
-/*  RESPONSIVE: smaller headline on narrow phones, full-width CTAs on    */
-/*  mobile, hero image capped on phones so it doesn't fill the screen.   */
-/* -------------------------------------------------------------------- */
-
-function Hero() {
-  const { colors } = useTheme();
-
-  return (
-    <section className="relative mx-auto max-w-7xl overflow-hidden px-4 pb-12 pt-10 min-[400px]:px-5 sm:px-8 sm:pb-10 sm:pt-20">
-      <div className="grid gap-12 md:grid-cols-2 md:items-center lg:grid-cols-12 lg:items-end">
-        <div className="animate-[fade-up_0.7s_ease-out_both] lg:col-span-7">
-          <span
-            className="inline-flex items-center gap-2 border px-3 py-1 font-mono text-[10px] tracking-widest sm:text-[11px]"
-            style={{ borderColor: SIGNAL, color: SIGNAL }}
-          >
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: SIGNAL }}
-            />
-            DROP 004 · LIVE NOW
-          </span>
-
-          <h1
-            className="mt-5 font-display text-[2.75rem] uppercase leading-[0.9] tracking-tight min-[400px]:text-5xl sm:mt-6 sm:text-6xl sm:leading-[0.85] md:text-6xl lg:text-8xl xl:text-9xl"
+      {action &&
+        (action.plain ? (
+          <a
+            href={action.href}
+            className="flex shrink-0 items-center gap-2 whitespace-nowrap pb-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] transition hover:opacity-60 sm:text-xs"
             style={{ color: colors.text }}
           >
-            Wear the
-            <br />
-            Grind<span style={{ color: SIGNAL }}>.</span>
-          </h1>
-
-          <p
-            className="mt-5 max-w-md text-sm sm:mt-6 sm:text-base"
-            style={{ color: colors.textMuted }}
+            {action.label}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          </a>
+        ) : (
+          <a
+            href={action.href}
+            className="shrink-0 whitespace-nowrap border px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition hover:opacity-70 sm:text-[11px]"
+            style={{ borderColor: colors.text, color: colors.text }}
           >
-            Streetwear for people who clock out and keep working. Heavyweight cotton, graphics
-            earned the hard way, and custom merch for the teams building alongside you.
-          </p>
+            {action.label}
+          </a>
+        ))}
+    </div>
+  );
+}
 
-          <div className="mt-7 flex flex-col gap-3 min-[480px]:flex-row min-[480px]:flex-wrap sm:mt-8 sm:gap-4">
-            <a
-              href="#products"
-              className="px-7 py-3 text-center font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95"
-              style={{
-                backgroundColor: SIGNAL,
-                color: "#131210",
-              }}
-            >
-              Shop the drop
-            </a>
+function StarRating({ rating, size = 12 }: { rating: number; size?: number }) {
+  const colors = usePalette();
+  return (
+    <div className="flex items-center gap-0.5" aria-label={`${rating} out of 5 stars`}>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <svg
+          key={i}
+          width={size}
+          height={size}
+          viewBox="0 0 24 24"
+          fill={i + 1 <= Math.round(rating) ? colors.text : "none"}
+          stroke={colors.text}
+          strokeWidth="1.5"
+        >
+          <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" />
+        </svg>
+      ))}
+    </div>
+  );
+}
 
-            <a
-              href="#custom"
-              className="border px-7 py-3 text-center font-mono text-xs font-bold uppercase tracking-widest transition"
-              style={{
-                borderColor: colors.lineStrong,
-                color: colors.text,
-              }}
-            >
-              Start customizing
-            </a>
-          </div>
-        </div>
+const wrap = "mx-auto max-w-[1600px] px-4 sm:px-8";
 
-        <div className="relative mx-auto w-full max-w-xs animate-[fade-up_0.9s_ease-out_0.15s_both] min-[480px]:max-w-sm md:max-w-none lg:col-span-5">
-          <div
-            className="relative aspect-[4/5] w-full overflow-hidden border"
-            style={{ borderColor: colors.line }}
+/* ------------------------------- Hero ------------------------------- */
+/* Four images only, sliding automatically every 3.5 seconds.
+   The slider fills the whole screen below the header on every device.
+   Replace the `image` URLs with your own photos (landscape, ~1920x1000).
+   `href` is where a click on that image goes; delete it to make it non-clickable. */
+
+const HERO_INTERVAL_MS = 3500;
+
+const HERO_SLIDES = [
+  { alt: "Drop 004", href: "/products", image: "https://picsum.photos/seed/hustler-hero-1/1920/1100" },
+  { alt: "The essentials edit", href: "/products", image: "https://picsum.photos/seed/hustler-hero-2/1920/1100" },
+  { alt: "Heavyweight hoodies", href: "/products", image: "https://picsum.photos/seed/hustler-hero-3/1920/1100" },
+  { alt: "New season", href: "/categories", image: "https://picsum.photos/seed/hustler-hero-4/1920/1100" },
+];
+
+function Hero() {
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+  const count = HERO_SLIDES.length;
+
+  const go = (dir: number) => setIndex((v) => (v + dir + count) % count);
+
+  // Depends on `index` so any manual change restarts the 3.5s timer.
+  useEffect(() => {
+    if (paused) return;
+    const t = setTimeout(() => setIndex((v) => (v + 1) % count), HERO_INTERVAL_MS);
+    return () => clearTimeout(t);
+  }, [index, paused, count]);
+
+  return (
+    <section
+      className="relative h-[calc(100svh-5.75rem)] min-h-[420px] w-full select-none overflow-hidden bg-[#d9d9d9] sm:h-[calc(100svh-6.25rem)]"
+      aria-roledescription="carousel"
+      aria-label="Featured images"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onTouchStart={(e) => {
+        touchStartX.current = e.touches[0].clientX;
+        setPaused(true);
+      }}
+      onTouchEnd={(e) => {
+        const start = touchStartX.current;
+        touchStartX.current = null;
+        setPaused(false);
+        if (start === null) return;
+        const dx = e.changedTouches[0].clientX - start;
+        if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1);
+      }}
+    >
+      <div
+        className="flex h-full transition-transform duration-700 ease-in-out"
+        style={{ transform: `translateX(-${index * 100}%)` }}
+      >
+        {HERO_SLIDES.map((s, n) => (
+          <a
+            key={s.image}
+            href={s.href}
+            tabIndex={n === index ? 0 : -1}
+            aria-hidden={n !== index}
+            aria-label={`${s.alt} (slide ${n + 1} of ${count})`}
+            className="relative block h-full w-full shrink-0"
           >
             <Img
-              src="https://picsum.photos/seed/hustler-hero/900/1100"
-              alt="TheHustlerMerchandise latest drop"
-              className="h-full w-full object-cover grayscale"
+              src={s.image}
+              alt={s.alt}
+              className="absolute inset-0 h-full w-full object-cover"
             />
+          </a>
+        ))}
+      </div>
 
-            <div
-              className="absolute inset-0 bg-gradient-to-t via-transparent to-transparent"
+      {/* Dots */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-5 mx-auto flex max-w-[1600px] items-center justify-between px-4 sm:bottom-6 sm:px-8">
+        <div className="pointer-events-auto flex gap-2">
+          {HERO_SLIDES.map((_, n) => (
+            <button
+              key={n}
+              type="button"
+              aria-label={`Go to slide ${n + 1}`}
+              aria-current={n === index}
+              onClick={() => setIndex(n)}
+              className="h-[3px] transition-all duration-300"
               style={{
-                backgroundImage: `linear-gradient(to top, ${colors.bg}, transparent)`,
+                width: n === index ? 44 : 28,
+                backgroundColor: n === index ? ORANGE : "rgba(255,255,255,0.8)",
               }}
             />
-          </div>
+          ))}
+        </div>
 
-          <div
-            className="absolute -bottom-4 -left-2 w-32 -rotate-3 border p-2.5 font-mono shadow-xl min-[400px]:-left-3 min-[400px]:w-36 sm:-bottom-6 sm:-left-10 sm:w-56 sm:p-3"
-            style={{
-              borderColor: "#131210",
-              backgroundColor: "#f3ede1",
-            }}
-          >
-            <p className="text-[8px] tracking-widest text-[#131210]/50 sm:text-[9px]">
-              WORK ORDER NO. 0004
-            </p>
-
-            <p className="mt-1 text-base font-bold leading-none text-[#131210] sm:text-lg">
-              35% OFF
-            </p>
-
-            <p className="mt-1 text-[8px] tracking-widest text-[#131210]/50 sm:text-[9px]">
-              AUTHORIZED · LIMITED RUN
-            </p>
-          </div>
-
-          <div
-            className="absolute -right-2 top-4 rotate-2 border px-2.5 py-1.5 font-mono text-[9px] tracking-widest backdrop-blur sm:-right-3 sm:top-6 sm:px-3 sm:py-2 sm:text-[10px]"
-            style={{
-              borderColor: colors.lineStrong,
-              backgroundColor: hexToRgba(colors.bg, 0.8),
-              color: colors.text,
-            }}
-          >
-            25,000+ HUSTLERS
-          </div>
+        {/* Arrows */}
+        <div className="pointer-events-auto flex gap-2">
+          {[-1, 1].map((d) => (
+            <button
+              key={d}
+              type="button"
+              aria-label={d < 0 ? "Previous slide" : "Next slide"}
+              onClick={() => go(d)}
+              className="flex h-10 w-10 items-center justify-center border border-white/70 bg-black/25 text-base text-white backdrop-blur transition hover:bg-white hover:text-black sm:h-11 sm:w-11"
+            >
+              {d < 0 ? "←" : "→"}
+            </button>
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
-/* -------------------------------------------------------------------- */
-/*  Featured Categories                                                  */
-/*  TOAST: error toast when categories fail to load (previously the      */
-/*  section just silently disappeared).                                  */
-/* -------------------------------------------------------------------- */
+/* ---------------------------- Categories ---------------------------- */
 
 function FeaturedCategories() {
-  const { colors } = useTheme();
   const { toast } = useToast();
-
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
-  const [status, setStatus] = useState<"loading" | "success" | "error">(
-    "loading"
-  );
+  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
 
   useEffect(() => {
     let cancelled = false;
-
-    async function loadCategories() {
-      setStatus("loading");
-
+    (async () => {
       try {
-        const res = await fetch("/api/categories", {
-          cache: "no-store",
-        });
-
-        if (!res.ok) {
-          throw new Error(`Request failed with ${res.status}`);
-        }
-
+        const res = await fetch("/api/categories", { cache: "no-store" });
+        if (!res.ok) throw new Error(String(res.status));
         const raw = await res.json();
         const data: CategoryDTO[] = Array.isArray(raw) ? raw : raw.data ?? [];
-
         if (!cancelled) {
-          setCategories(data.slice(0, 4));
+          setCategories(data.slice(0, 8));
           setStatus("success");
         }
       } catch {
         if (!cancelled) {
           setStatus("error");
-          toast(
-            "Couldn't load collections. Please refresh the page.",
-            "error"
-          );
+          toast("Couldn't load collections. Please refresh the page.", "error");
         }
       }
-    }
-
-    loadCategories();
-
+    })();
     return () => {
       cancelled = true;
     };
   }, [toast]);
 
-  if (
-    status === "error" ||
-    (status === "success" && categories.length === 0)
-  ) {
-    return null;
-  }
+  if (status === "error" || (status === "success" && categories.length === 0)) return null;
 
   return (
-    <section
-      id="categories"
-      className="mx-auto max-w-7xl px-4 py-12 min-[400px]:px-5 sm:px-8 sm:py-16"
-    >
+    <section id="categories" className={`${wrap} scroll-mt-28 py-12 sm:py-16`}>
       <SectionHeading
-        eyebrow="Collections"
+        eyebrow="Explore"
         title="Shop by category"
-        action={{
-          label: "View all",
-          href: "/categories",
-        }}
+        action={{ label: "Shop all", href: "/categories", plain: true }}
       />
-
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 md:grid-cols-4 lg:gap-6">
         {status === "loading"
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="aspect-[3/4] animate-pulse border"
-                style={{
-                  borderColor: colors.line,
-                  backgroundColor: colors.panel,
-                }}
-              />
+          ? Array.from({ length: 8 }).map((_, n) => (
+              <div key={n} className="aspect-[4/5] animate-pulse" style={{ backgroundColor: GREY }} />
             ))
-          : categories.map((cat, index) => {
-              const fallbackImage = `https://picsum.photos/seed/hustler-cat-${cat.categoryId || index}/600/800`;
-
-              return (
-                <a
-                  key={cat.categoryId || `category-${index}`}
-                  href={`/categories#${cat.categoryId}`}
-                  className="group relative block aspect-[3/4] overflow-hidden border"
-                  style={{
-                    borderColor: colors.line,
-                    backgroundColor: colors.panel,
-                  }}
-                >
-                  <Img
-                    src={cat.imageUrl || fallbackImage}
-                    alt={cat.categoryName}
-                    className="h-full w-full object-cover grayscale transition duration-500 group-hover:scale-105 group-hover:grayscale-0"
-                  />
-
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      backgroundImage: `linear-gradient(to top, ${colors.bg}, ${hexToRgba(colors.bg, 0.1)}, transparent)`,
-                    }}
-                  />
-
-                  <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
-                    <p
-                      className="font-display text-base uppercase leading-tight tracking-tight min-[400px]:text-lg sm:text-xl"
-                      style={{ color: colors.text }}
-                    >
-                      {cat.categoryName}
-                    </p>
-
-                    {cat.description && (
-                      <p
-                        className="mt-1 line-clamp-2 max-w-[90%] font-mono text-[9px] leading-relaxed sm:text-[10px]"
-                        style={{
-                          color: colors.textMuted,
-                        }}
-                      >
-                        {cat.description}
-                      </p>
-                    )}
-                  </div>
-                </a>
-              );
-            })}
+          : categories.map((cat, n) => (
+              <a
+                key={cat.categoryId || n}
+                href={`/categories#${cat.categoryId}`}
+                className="group relative block aspect-[4/5] overflow-hidden"
+                style={{ backgroundColor: GREY }}
+              >
+                <Img
+                  src={cat.imageUrl || `https://picsum.photos/seed/hustler-cat-${cat.categoryId || n}/640/800`}
+                  alt={cat.categoryName}
+                  className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                />
+                <div
+                  className="absolute inset-x-0 bottom-0 h-1/3"
+                  style={{ backgroundImage: "linear-gradient(to top, rgba(110,110,110,0.95), rgba(110,110,110,0))" }}
+                />
+                <p className="absolute bottom-3 left-3 right-3 text-base font-bold uppercase leading-tight text-white sm:bottom-5 sm:left-5 sm:right-5 sm:text-xl lg:text-2xl">
+                  {cat.categoryName}
+                </p>
+              </a>
+            ))}
       </div>
     </section>
   );
 }
 
-/* -------------------------------------------------------------------- */
-/*  Product card                                                        */
-/*  RESPONSIVE: "View Product" bar used to appear on hover only, which   */
-/*  never fires on touch screens. It's now always visible below md and   */
-/*  hover-reveal from md up. The product name is also a link.            */
-/* -------------------------------------------------------------------- */
+/* ---------------------------- Product card -------------------------- */
 
-function ProductCard({ product }: { product: Product }) {
-  const { colors } = useTheme();
+function priceInfo(product: Product) {
+  const vs = product.variants ?? [];
+  if (!vs.length) return null;
+  const cheapest = vs.reduce((a, b) => (Number(b.price) < Number(a.price) ? b : a));
+  const price = Number(cheapest.price);
+  const compare = Number(cheapest.comparePrice ?? 0);
+  const off = compare > price ? Math.round(((compare - price) / compare) * 100) : 0;
+  return { price, compare: off ? compare : 0, off };
+}
 
-  const price =
-    product.variants && product.variants.length > 0
-      ? Math.min(...product.variants.map((variant) => Number(variant.price)))
-      : null;
+function ProductCard({ product, isNew }: { product: Product; isNew?: boolean }) {
+  const colors = usePalette();
+  const info = priceInfo(product);
+  const colours = Array.from(
+    new Set((product.variants ?? []).map((v) => v.colour).filter(Boolean) as string[])
+  ).slice(0, 5);
+  const href = `/products/${product.productId}`;
+  const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
   return (
     <div className="group min-w-0">
-      <div
-        className="relative aspect-[4/5] overflow-hidden border"
-        style={{
-          borderColor: colors.line,
-          backgroundColor: colors.panel,
-        }}
-      >
-        <Img
-          src={product.productImage || ""}
-          alt={product.productName}
-          className="h-full w-full object-cover grayscale transition duration-500 ease-out group-hover:scale-105 group-hover:grayscale-0"
-        />
-
-        <a
-          href={`/products/${product.productId}`}
-          className="absolute inset-x-2 bottom-2 py-2 text-center font-mono text-[10px] font-bold uppercase tracking-widest transition duration-300 sm:inset-x-3 sm:bottom-3 sm:text-xs md:translate-y-3 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100 md:group-focus-within:translate-y-0 md:group-focus-within:opacity-100"
-          style={{
-            backgroundColor: colors.text,
-            color: colors.bg,
-          }}
-        >
-          View Product
+      <div className="relative aspect-[4/5] overflow-hidden" style={{ backgroundColor: GREY }}>
+        <a href={href} aria-label={product.productName}>
+          <Img
+            src={product.productImage || ""}
+            alt={product.productName}
+            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+          />
         </a>
+        <div className="pointer-events-none absolute left-2 top-2 flex flex-col items-start gap-1">
+          {isNew && (
+            <span className="bg-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-black">
+              New
+            </span>
+          )}
+          {info?.off ? (
+            <span
+              className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-white"
+              style={{ backgroundColor: ORANGE }}
+            >
+              -{info.off}%
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div className="mt-3">
-        <a href={`/products/${product.productId}`}>
-          <h3
-            className="line-clamp-2 text-sm font-medium leading-snug"
-            style={{ color: colors.text }}
-          >
+        <a href={href}>
+          <h3 className="line-clamp-1 text-sm font-medium" style={{ color: colors.text }}>
             {product.productName}
           </h3>
         </a>
-
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <StarRating rating={product.rating ?? 0} size={12} />
-
-          <span
-            className="font-mono text-[10px]"
-            style={{ color: colors.textMuted }}
-          >
-            ({product.reviewCount ?? 0})
-          </span>
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-2 text-sm">
+          {info ? (
+            <>
+              <span className="font-semibold" style={{ color: colors.text }}>{fmt(info.price)}</span>
+              {info.compare ? (
+                <>
+                  <span className="text-xs line-through" style={{ color: colors.textMuted }}>
+                    {fmt(info.compare)}
+                  </span>
+                  <span className="text-xs font-semibold" style={{ color: ORANGE }}>
+                    {info.off}% off
+                  </span>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <span style={{ color: colors.textMuted }}>Price unavailable</span>
+          )}
         </div>
-
-        <div className="mt-1 flex items-center gap-2 font-mono text-sm">
-          <span style={{ color: SIGNAL }}>
-            {price !== null
-              ? `₹${price.toLocaleString("en-IN")}`
-              : "Price unavailable"}
-          </span>
-        </div>
+        {colours.length > 0 && (
+          <div className="mt-2 flex gap-1.5">
+            {colours.map((c) => (
+              <span
+                key={c}
+                title={c}
+                className="h-2.5 w-2.5 rounded-full border border-black/30"
+                style={{ backgroundColor: c.toLowerCase() }}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* -------------------------------------------------------------------- */
-/*  Featured Products                                                   */
-/* -------------------------------------------------------------------- */
-
-function FeaturedProducts({
+function ProductGrid({
+  eyebrow,
+  title,
+  action,
   products,
   loading,
+  count,
+  isNew,
+  id,
 }: {
+  eyebrow: string;
+  title: string;
+  action: { label: string; href: string };
   products: Product[];
   loading: boolean;
+  count: number;
+  isNew?: boolean;
+  id?: string;
 }) {
-  const { colors } = useTheme();
-
   return (
-    <section
-      id="products"
-      className="mx-auto max-w-7xl px-4 py-12 min-[400px]:px-5 sm:px-8 sm:py-16"
-    >
-      <SectionHeading
-        eyebrow="Drop 004"
-        title="Featured products"
-        action={{
-          label: "Shop all",
-          href: "/products",
-        }}
-      />
-
-      <div className="grid grid-cols-2 gap-3 sm:gap-6 md:grid-cols-3 lg:grid-cols-4">
+    <section id={id} className={`${wrap} scroll-mt-28 py-12 sm:py-16`}>
+      <SectionHeading eyebrow={eyebrow} title={title} action={action} />
+      <div className="grid grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-5 md:grid-cols-4">
         {loading
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="aspect-[4/5] animate-pulse border"
-                style={{
-                  borderColor: colors.line,
-                  backgroundColor: colors.panel,
-                }}
-              />
+          ? Array.from({ length: 4 }).map((_, n) => (
+              <div key={n} className="aspect-[4/5] animate-pulse" style={{ backgroundColor: GREY }} />
             ))
-          : products
-              .slice(0, 4)
-              .map((product) => (
-                <ProductCard key={product.productId} product={product} />
-              ))}
+          : products.slice(0, count).map((p) => <ProductCard key={p.productId} product={p} isNew={isNew} />)}
       </div>
     </section>
   );
 }
 
-/* -------------------------------------------------------------------- */
-/*  Custom Merchandise                                                  */
-/*  RESPONSIVE: tighter paddings, image capped on mobile, full-width     */
-/*  CTA on phones.                                                       */
-/* -------------------------------------------------------------------- */
+/* ----------------------------- Instagram ---------------------------- */
 
-function CustomMerch() {
-  const { colors } = useTheme();
+const INSTAGRAM_URL = "https://www.instagram.com/thehustler.merchandise/?hl=en";
 
-  const steps = [
+const REELS = [
+  { seed: "ig-1", caption: "Fit check: Fleece Hoodie" },
+  { seed: "ig-2", caption: "Styling the Oversized Tee" },
+  { seed: "ig-3", caption: "Inside the print studio" },
+  { seed: "ig-4", caption: "Rooftop drop — AW26" },
+];
+
+function InstagramSection() {
+  return (
+    <section className={`${wrap} py-12 sm:py-16`}>
+      <SectionHeading
+        eyebrow="@thehustler.merchandise"
+        title="Seen on Instagram"
+        action={{ label: "View Instagram", href: INSTAGRAM_URL }}
+      />
+      <div className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-4 sm:gap-3 sm:px-0 [&::-webkit-scrollbar]:hidden">
+        {REELS.map((r) => (
+          <a
+            key={r.seed}
+            href={INSTAGRAM_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group relative aspect-[3/4] w-[62%] shrink-0 snap-start overflow-hidden sm:w-auto"
+            style={{ backgroundColor: INK }}
+          >
+            <Img
+              src={`https://picsum.photos/seed/hustler-${r.seed}/600/800`}
+              alt={r.caption}
+              className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+            />
+            <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-black">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </span>
+            <span
+              className="absolute inset-x-0 bottom-0 p-3 text-[11px] font-semibold text-white"
+              style={{ backgroundImage: "linear-gradient(to top, rgba(0,0,0,0.65), transparent)" }}
+            >
+              {r.caption}
+            </span>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* --------------------------- Testimonials --------------------------- */
+
+const REVIEWS = [
+  { id: "r1", author: "Aarav M.", city: "Mumbai", rating: 5, text: "Heavier than anything from the mall brands. The hoodie held up through a whole winter of daily wear and still looks new." },
+  { id: "r2", author: "Simran K.", city: "Chandigarh", rating: 5, text: "Ordered custom prints for our team of 14. Proof came in a day, the print matched it exactly, delivered in under a week." },
+  { id: "r3", author: "Rohan I.", city: "Bengaluru", rating: 4, text: "Great fabric. Sizing runs slightly large, so go one size down. Otherwise exactly as pictured." },
+  { id: "r4", author: "Neha K.", city: "Pune", rating: 5, text: "The cap is well built: stiff brim, no loose threads. Feels like it costs twice as much." },
+  { id: "r5", author: "Karthik R.", city: "Hyderabad", rating: 5, text: "Stitching is clean and the print hasn't cracked after a dozen washes." },
+  { id: "r6", author: "Ishita B.", city: "Kolkata", rating: 4, text: "Shipping took a day longer than quoted, but support kept me updated all the way. Worth the wait." },
+];
+
+function Testimonials() {
+  const colors = usePalette();
+  const ref = useRef<HTMLDivElement>(null);
+  const scroll = (d: number) => {
+    const el = ref.current;
+    if (el) el.scrollBy({ left: d * (el.clientWidth * 0.8), behavior: "smooth" });
+  };
+
+  return (
+    <section className={`${wrap} py-12 sm:py-16`}>
+      <div className="mb-6 flex items-end justify-between sm:mb-8">
+        <div>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.25em]" style={{ color: ORANGE }}>
+            25,000+ hustlers
+          </span>
+          <h2 className="mt-1.5 font-display text-3xl font-black uppercase leading-none tracking-tight sm:text-5xl" style={{ color: colors.text }}>
+            What they say
+          </h2>
+        </div>
+        <div className="flex gap-2">
+          {[-1, 1].map((d) => (
+            <button
+              key={d}
+              type="button"
+              aria-label={d < 0 ? "Previous reviews" : "Next reviews"}
+              onClick={() => scroll(d)}
+              className="flex h-9 w-9 items-center justify-center border text-sm transition hover:opacity-70"
+              style={{ borderColor: colors.lineStrong, color: colors.text }}
+            >
+              {d < 0 ? "←" : "→"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div ref={ref} className="flex snap-x snap-mandatory gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {REVIEWS.map((r) => (
+          <figure
+            key={r.id}
+            className="flex w-[85%] shrink-0 snap-start flex-col justify-between border p-5 sm:w-[calc(50%-6px)] lg:w-[calc(33.333%-8px)]"
+            style={{ borderColor: colors.line }}
+          >
+            <div>
+              <span className="font-display text-3xl leading-none" style={{ color: ORANGE }} aria-hidden>
+                “
+              </span>
+              <div className="mt-1"><StarRating rating={r.rating} /></div>
+              <blockquote className="mt-3 text-sm leading-relaxed" style={{ color: colors.text }}>
+                {r.text}
+              </blockquote>
+            </div>
+            <figcaption className="mt-5 text-xs">
+              <span className="font-semibold" style={{ color: colors.text }}>{r.author}</span>
+              <span style={{ color: colors.textMuted }}> · {r.city}</span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ----------------------------- Newsletter --------------------------- */
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function Newsletter() {
+  const { toast } = useToast();
+  const router = useRouter();
+  const colors = usePalette();
+  const [email, setEmail] = useState("");
+
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const v = email.trim();
+    if (!v) return toast("Enter your email to join.", "error");
+    if (!EMAIL_RE.test(v)) return toast("That email doesn't look right. Check it and try again.", "error");
+    toast("You're in. Taking you to sign up…", "success");
+    setTimeout(() => router.push(`/signup?email=${encodeURIComponent(v)}`), 800);
+  }
+
+  return (
+    <section className="px-4 py-14 text-center sm:py-20" style={{ backgroundColor: colors.panel, color: colors.text }}>
+      <span className="text-[10px] font-semibold uppercase tracking-[0.25em]" style={{ color: ORANGE }}>
+        Join the hustle
+      </span>
+      <h2 className="mx-auto mt-2 max-w-3xl font-display text-3xl font-black uppercase leading-[0.95] tracking-tight sm:text-6xl">
+        Get 10% off your first order
+      </h2>
+      <p className="mt-3 text-sm" style={{ color: colors.textMuted }}>Early access to drops, exclusive offers and studio stories.</p>
+      <form noValidate onSubmit={submit} className="mx-auto mt-6 flex w-full max-w-md border" style={{ borderColor: colors.lineStrong, backgroundColor: colors.bg }}>
+        <input
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          aria-label="Email address"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Your email address"
+          className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base focus:outline-none sm:text-sm"
+          style={{ color: colors.text }}
+        />
+        <button type="submit" className="shrink-0 px-6 text-[11px] font-bold uppercase tracking-widest" style={{ backgroundColor: colors.text, color: colors.bg }}>
+          Subscribe
+        </button>
+      </form>
+    </section>
+  );
+}
+
+/* ------------------------------- Footer ----------------------------- */
+
+/* Replace these with your real profile links. */
+const SOCIALS = [
+  { label: "Instagram", href: INSTAGRAM_URL, path: "M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zm5 5.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm5-2.2a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6z" },
+  { label: "YouTube", href: "https://www.youtube.com/", path: "M3 8a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8zm7 1.5v5l4.5-2.5L10 9.5z" },
+  { label: "X (Twitter)", href: "https://x.com/", path: "M22 5.9c-.7.3-1.4.5-2.1.6a3.700 3.700 0 0 0 1.600-2 7.300 7.300 0 0 1-2.300.9 3.600 3.600 0 0 0-6.200 3.300A10.200 10.200 0 0 1 3.600 5a3.600 3.600 0 0 0 1.100 4.800 3.600 3.600 0 0 1-1.600-.4c0 1.700 1.200 3.200 2.900 3.600-.5.100-1 .2-1.600.1a3.600 3.600 0 0 0 3.400 2.500A7.300 7.300 0 0 1 2 17.100 10.300 10.300 0 0 0 7.600 18.700c6.700 0 10.400-5.600 10.400-10.400v-.5c.7-.5 1.300-1.200 2-1.900z" },
+  { label: "Facebook", href: "https://www.facebook.com/", path: "M14 8h3V4h-3a4 4 0 0 0-4 4v2H7v4h3v7h4v-7h3l1-4h-4V8z" },
+];
+
+function Footer() {
+  const { status } = useSession();
+  const { toast } = useToast();
+  const router = useRouter();
+  const isAuthenticated = status === "authenticated";
+
+  function trackOrder(e: React.MouseEvent<HTMLAnchorElement>) {
+    e.preventDefault();
+    if (status === "loading") return toast("Checking your session — try again in a moment.", "info");
+    if (isAuthenticated) return router.push("/orders");
+    toast("Please log in to track your order.", "info");
+    setTimeout(() => router.push(`/login?redirect=${encodeURIComponent("/orders")}`), 900);
+  }
+
+  const cols: { title: string; links: { label: string; href: string; onClick?: typeof trackOrder }[] }[] = [
     {
-      n: "01",
-      title: "Upload your design",
-      desc: "Logo, artwork, or just an idea — send us what you've got.",
+      title: "Shop",
+      links: [
+        { label: "Shop All", href: "/products" },
+        { label: "New Arrivals", href: "/#products" },
+        { label: "Bestsellers", href: "/products" },
+        { label: "T-Shirts", href: "/products?search=t-shirt" },
+        { label: "Hoodies", href: "/products?search=hoodie" },
+        { label: "Collections", href: "/categories" },
+      ],
     },
     {
-      n: "02",
-      title: "Approve the mockup",
-      desc: "We send a proof before anything goes to print. No surprises.",
+      title: "Support",
+      links: [
+        { label: "Contact Us", href: "mailto:support@thehustlermerchandise.com" },
+        { label: "Shipping Policy", href: "/shipping-policy" },
+        { label: "Size Guide", href: "/size-guide" },
+        { label: "My Account", href: "/account" },
+        {
+          label: "Track Orders",
+          href: isAuthenticated ? "/orders" : `/login?redirect=${encodeURIComponent("/orders")}`,
+          onClick: trackOrder,
+        },
+      ],
     },
     {
-      n: "03",
-      title: "We print & ship",
-      desc: "Small-batch production, PAN India delivery in 5–7 days.",
+      title: "Company",
+      links: [
+        { label: "Returns & Exchanges", href: "/returns-exchanges" },
+        { label: "Privacy Policy", href: "/privacy-policy" },
+        { label: "Terms & Conditions", href: "/terms-of-service" },
+      ],
     },
   ];
 
   return (
-    <section
-      id="custom"
-      className="py-12 sm:py-20"
-      style={{ backgroundColor: colors.panel }}
-    >
-      <div className="mx-auto grid max-w-7xl gap-8 px-4 min-[400px]:px-5 sm:px-8 md:grid-cols-2 md:items-center md:gap-10 lg:grid-cols-12 lg:gap-16">
-        <div className="lg:col-span-6">
-          <div
-            className="relative mx-auto aspect-[4/5] max-w-sm overflow-hidden border md:max-w-none"
-            style={{ borderColor: colors.line }}
-          >
-            <Img
-              src="https://picsum.photos/seed/hustler-custom/900/1100"
-              alt="Custom printed merchandise"
-              className="h-full w-full object-cover grayscale"
-            />
-
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage: `linear-gradient(to top, ${hexToRgba(
-                  colors.bg,
-                  0.8
-                )}, transparent)`,
-              }}
-            />
-
-            <div
-              className="absolute bottom-4 left-4 border px-3 py-2 font-mono text-[10px] font-bold tracking-widest sm:bottom-5 sm:left-5 sm:px-4 sm:text-xs"
-              style={{
-                borderColor: "#131210",
-                backgroundColor: SIGNAL,
-                color: "#131210",
-              }}
-            >
-              MOQ: JUST 2 PIECES
+    <footer style={{ backgroundColor: INK, color: "#fff" }}>
+      <div className={`${wrap} pb-8 pt-12 sm:pt-16`}>
+        <div className="grid gap-10 md:grid-cols-3 lg:grid-cols-[1.6fr_1fr_1fr_1fr] lg:gap-12">
+          {/* Brand */}
+          <div className="md:col-span-3 lg:col-span-1">
+            <p className="font-display text-xl font-black uppercase tracking-[0.12em] sm:text-2xl">
+              The Hustler Merchandise
+            </p>
+            <p className="mt-4 max-w-xs text-sm leading-relaxed text-[#a3a3a3]">
+              Premium streetwear essentials, designed in India. Wear ours or make it yours with our
+              customisation studio.
+            </p>
+            <div className="mt-6 flex gap-3">
+              {SOCIALS.map((so) => (
+                <a
+                  key={so.label}
+                  href={so.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={so.label}
+                  className="flex h-10 w-10 items-center justify-center border border-white/20 text-white/90 transition hover:border-white hover:bg-white hover:text-black"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden>
+                    <path d={so.path} />
+                  </svg>
+                </a>
+              ))}
             </div>
           </div>
-        </div>
 
-        <div className="lg:col-span-6">
-          <span
-            className="font-mono text-[10px] tracking-[0.25em] sm:text-[11px]"
-            style={{ color: SIGNAL }}
-          >
-            Print on demand
-          </span>
-
-          <h2
-            className="mt-3 font-display text-3xl uppercase leading-[0.95] tracking-tight min-[400px]:text-4xl sm:text-5xl"
-            style={{ color: colors.text }}
-          >
-            Your logo.
-            <br />
-            Your crew.
-            <br />
-            Our print.
-          </h2>
-
-          <p
-            className="mt-5 max-w-lg text-sm sm:text-base"
-            style={{ color: colors.textMuted }}
-          >
-            Building a team, a brand, or a side hustle? Get your logo or artwork printed on
-            hoodies, tees, and caps with the same heavyweight materials as our main drops — no
-            minimum order stress, no compromise on quality.
-          </p>
-
-          <div className="mt-8 space-y-5">
-            {steps.map((s, i) => (
-              <div
-                key={s.n}
-                className="flex gap-4 border-t pt-4 first:border-t-0 first:pt-0"
-                style={{
-                  borderColor: i === 0 ? "transparent" : colors.line,
-                }}
-              >
-                <span
-                  className="font-display text-2xl"
-                  style={{ color: SIGNAL }}
-                >
-                  {s.n}
-                </span>
-
-                <div className="min-w-0">
-                  <p className="font-medium" style={{ color: colors.text }}>
-                    {s.title}
-                  </p>
-
-                  <p
-                    className="text-sm"
-                    style={{ color: colors.textMuted }}
-                  >
-                    {s.desc}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <a
-            href="/products"
-            className="mt-8 block px-7 py-3 text-center font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95 sm:inline-block"
-            style={{
-              backgroundColor: SIGNAL,
-              color: "#131210",
-            }}
-          >
-            Start customizing
-          </a>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* -------------------------------------------------------------------- */
-/*  Best Products                                                       */
-/*  RESPONSIVE: narrower cards on small phones so the next card peeks    */
-/*  in (signals swipe), scroll-padding so snapping respects the gutter.  */
-/* -------------------------------------------------------------------- */
-
-function BestProducts({
-  products,
-  loading,
-}: {
-  products: Product[];
-  loading: boolean;
-}) {
-  const { colors } = useTheme();
-
-  const scrollerRef = useRef<HTMLDivElement>(null);
-
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
-  const sorted = [...products].sort(
-    (a, b) =>
-      (b.rating ?? 0) * (b.reviewCount ?? 0) -
-      (a.rating ?? 0) * (a.reviewCount ?? 0)
-  );
-
-  function updateScrollState() {
-    const el = scrollerRef.current;
-    if (!el) return;
-
-    setCanScrollLeft(el.scrollLeft > 4);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
-  }
-
-  useEffect(() => {
-    updateScrollState();
-
-    const el = scrollerRef.current;
-    if (!el) return;
-
-    el.addEventListener("scroll", updateScrollState, { passive: true });
-    window.addEventListener("resize", updateScrollState);
-
-    return () => {
-      el.removeEventListener("scroll", updateScrollState);
-      window.removeEventListener("resize", updateScrollState);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, products.length]);
-
-  const scroll = (dir: 1 | -1) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-
-    const firstCard = el.querySelector<HTMLElement>("[data-best-card]");
-    const amount = firstCard
-      ? firstCard.getBoundingClientRect().width + 16
-      : 320;
-
-    el.scrollBy({
-      left: dir * amount,
-      behavior: "smooth",
-    });
-  };
-
-  const cardWidth =
-    "w-[160px] min-[400px]:w-[200px] sm:w-[240px]";
-
-  return (
-    <section className="mx-auto max-w-7xl px-4 py-12 min-[400px]:px-5 sm:px-8 sm:py-16">
-      <div
-        className="mb-6 flex items-end justify-between gap-3 border-b pb-4 sm:mb-8 sm:gap-4 sm:pb-5"
-        style={{ borderColor: colors.line }}
-      >
-        <div className="min-w-0">
-          <span
-            className="font-mono text-[10px] tracking-[0.25em] sm:text-[11px]"
-            style={{ color: SIGNAL }}
-          >
-            Top rated
-          </span>
-
-          <h2
-            className="mt-2 font-display text-2xl uppercase tracking-tight min-[400px]:text-3xl sm:text-4xl"
-            style={{ color: colors.text }}
-          >
-            Best products
-          </h2>
-        </div>
-
-        <div className="hidden gap-2 sm:flex">
-          <button
-            type="button"
-            aria-label="Scroll left"
-            disabled={!canScrollLeft}
-            onClick={() => scroll(-1)}
-            className="h-9 w-9 border transition disabled:cursor-not-allowed"
-            style={{
-              borderColor: colors.lineStrong,
-              color: colors.textMuted,
-              opacity: canScrollLeft ? 1 : 0.35,
-            }}
-          >
-            ←
-          </button>
-
-          <button
-            type="button"
-            aria-label="Scroll right"
-            disabled={!canScrollRight}
-            onClick={() => scroll(1)}
-            className="h-9 w-9 border transition disabled:cursor-not-allowed"
-            style={{
-              borderColor: colors.lineStrong,
-              color: colors.textMuted,
-              opacity: canScrollRight ? 1 : 0.35,
-            }}
-          >
-            →
-          </button>
-        </div>
-      </div>
-
-      <div
-        ref={scrollerRef}
-        className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-4 [-ms-overflow-style:none] [scrollbar-width:none] min-[400px]:-mx-5 min-[400px]:scroll-px-5 min-[400px]:px-5 sm:mx-0 sm:scroll-px-0 sm:gap-4 sm:px-0 [&::-webkit-scrollbar]:hidden"
-      >
-        {loading
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className={`relative shrink-0 snap-start ${cardWidth}`}
-              >
-                <div
-                  className="aspect-[3/4] animate-pulse border"
-                  style={{
-                    borderColor: colors.line,
-                    backgroundColor: colors.panel,
-                  }}
-                />
-              </div>
-            ))
-          : sorted.map((product) => {
-              const price =
-                product.variants && product.variants.length > 0
-                  ? Math.min(
-                      ...product.variants.map((variant) =>
-                        Number(variant.price)
-                      )
-                    )
-                  : null;
-
-              return (
-                <a
-                  key={product.productId}
-                  data-best-card
-                  href={`/products/${product.productId}`}
-                  className={`relative shrink-0 snap-start ${cardWidth}`}
-                >
-                  <div
-                    className="relative aspect-[3/4] overflow-hidden border"
-                    style={{
-                      borderColor: colors.line,
-                      backgroundColor: colors.panel,
-                    }}
-                  >
-                    <Img
-                      src={product.productImage || ""}
-                      alt={product.productName}
-                      className="h-full w-full object-cover grayscale transition duration-500 hover:scale-105 hover:grayscale-0"
-                    />
-                  </div>
-
-                  <p
-                    className="mt-2 truncate text-xs"
-                    style={{
-                      color: colors.text,
-                      opacity: 0.85,
-                    }}
-                  >
-                    {product.productName}
-                  </p>
-
-                  <div className="mt-1 flex items-center gap-2 font-mono text-xs">
-                    <span style={{ color: SIGNAL }}>
-                      {price !== null
-                        ? `₹${price.toLocaleString("en-IN")}`
-                        : "Price unavailable"}
-                    </span>
-                  </div>
-
-                  <div className="mt-1">
-                    <StarRating rating={product.rating ?? 0} size={12} />
-                  </div>
-                </a>
-              );
-            })}
-      </div>
-    </section>
-  );
-}
-
-/* -------------------------------------------------------------------- */
-/*  Brand Story                                                         */
-/*  RESPONSIVE: image capped on phones, smaller paddings.               */
-/* -------------------------------------------------------------------- */
-
-function BrandStory() {
-  const { colors } = useTheme();
-
-  return (
-    <section
-      id="story"
-      className="mx-auto max-w-7xl px-4 py-14 min-[400px]:px-5 sm:px-8 sm:py-20"
-    >
-      <div className="grid gap-8 md:grid-cols-2 md:items-center md:gap-10 lg:grid-cols-12 lg:gap-16">
-        <div className="lg:col-span-5">
-          <div
-            className="relative mx-auto aspect-[4/5] max-w-sm overflow-hidden border md:max-w-none"
-            style={{
-              borderColor: colors.line,
-              backgroundColor: colors.panel,
-            }}
-          >
-            <Img
-              src="https://picsum.photos/seed/hustler-founder/800/1000"
-              alt="Founder of TheHustlerMerchandise"
-              className="h-full w-full object-cover grayscale"
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-col justify-center lg:col-span-7">
-          <span
-            className="font-mono text-[10px] tracking-[0.25em] sm:text-[11px]"
-            style={{ color: SIGNAL }}
-          >
-            Our story
-          </span>
-
-          <h2
-            className="mt-3 font-display text-3xl uppercase leading-[0.95] tracking-tight min-[400px]:text-4xl sm:text-5xl"
-            style={{ color: colors.text }}
-          >
-            Made for the ones
-            <br />
-            who don&apos;t clock out
-          </h2>
-
-          <p
-            className="mt-6 max-w-xl text-sm sm:text-base"
-            style={{ color: colors.textMuted }}
-          >
-            TheHustlerMerchandise started as a side hustle between late shifts and early
-            mornings — printed one hoodie at a time for a crew that refused to settle. Every
-            piece we drop is still designed the same way: heavyweight fabric, graphics that mean
-            something, and small-batch runs so nothing feels mass-produced.
-          </p>
-
-          <p
-            className="mt-4 max-w-xl text-sm sm:text-base"
-            style={{ color: colors.textMuted }}
-          >
-            Today that same crew mentality runs the custom merch side of the business — printing
-            for founders, creators, and teams who want gear that actually looks like it belongs
-            on a shelf, not a stockroom.
-          </p>
-
-          <div
-            className="mt-8 grid grid-cols-3 gap-3 border-t pt-6 sm:gap-6"
-            style={{ borderColor: colors.line }}
-          >
-            {[
-              { value: "40K+", label: "Pieces shipped" },
-              { value: "4.8/5", label: "Avg. rating" },
-              { value: "100%", label: "Small-batch" },
-            ].map((stat) => (
-              <div key={stat.label}>
-                <p
-                  className="font-display text-xl min-[400px]:text-2xl sm:text-3xl"
-                  style={{ color: SIGNAL }}
-                >
-                  {stat.value}
-                </p>
-
-                <p
-                  className="font-mono text-[9px] tracking-widest sm:text-[10px]"
-                  style={{ color: colors.textMuted }}
-                >
-                  {stat.label}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* -------------------------------------------------------------------- */
-/*  Reviews                                                             */
-/* -------------------------------------------------------------------- */
-
-function ReviewCard({ review }: { review: Review }) {
-  const { colors } = useTheme();
-
-  return (
-    <div
-      className="flex h-full flex-col justify-between border p-4 sm:p-5"
-      style={{
-        borderColor: colors.line,
-        backgroundColor: colors.panel,
-      }}
-    >
-      <div>
-        <StarRating rating={review.rating} />
-
-        <p
-          className="mt-3 text-sm leading-relaxed"
-          style={{ color: colors.textMuted }}
-        >
-          &ldquo;{review.text}&rdquo;
-        </p>
-      </div>
-
-      <div
-        className="mt-5 flex items-center gap-3 border-t pt-4"
-        style={{ borderColor: colors.line }}
-      >
-        <Img
-          src={`https://picsum.photos/seed/${review.avatarSeed}/80/80`}
-          alt={review.author}
-          className="h-9 w-9 shrink-0 rounded-full object-cover grayscale"
-        />
-
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-x-1.5">
-            <p
-              className="text-xs font-medium"
-              style={{ color: colors.text }}
-            >
-              {review.author}
-            </p>
-
-            {review.verified && (
-              <span
-                className="font-mono text-[9px]"
-                style={{ color: SIGNAL }}
-              >
-                ✓ Verified
-              </span>
-            )}
-          </div>
-
-          <p
-            className="truncate font-mono text-[10px]"
-            style={{ color: colors.textMuted }}
-          >
-            {review.product} · {review.location}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Reviews() {
-  const { colors } = useTheme();
-
-  return (
-    <section
-      className="py-12 sm:py-20"
-      style={{
-        backgroundColor: hexToRgba(colors.panel, 0.4),
-      }}
-    >
-      <div className="mx-auto max-w-7xl px-4 min-[400px]:px-5 sm:px-8">
-        <SectionHeading
-          eyebrow="25,000+ hustlers"
-          title="What they're saying"
-        />
-
-        <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-          {REVIEWS.map((r) => (
-            <ReviewCard key={r.id} review={r} />
+          {/* Link columns */}
+          {cols.map((c) => (
+            <div key={c.title}>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#9a9a9a]">
+                {c.title}
+              </p>
+              <ul className="mt-5 space-y-3 text-sm">
+                {c.links.map((l) => (
+                  <li key={l.label}>
+                    <a href={l.href} onClick={l.onClick} className="inline-block text-white transition hover:text-[#F26522]">
+                      {l.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
         </div>
-      </div>
-    </section>
-  );
-}
 
-/* -------------------------------------------------------------------- */
-/*  Instagram                                                           */
-/*  RESPONSIVE FIX: the "ON THE FLOOR" tag sat at -bottom-4 INSIDE an    */
-/*  overflow-hidden box, so it was being clipped. It now lives on an     */
-/*  outer wrapper; the image keeps its own overflow-hidden box.          */
-/* -------------------------------------------------------------------- */
-
-const INSTAGRAM_URL = "https://www.instagram.com/thehustler.merchandise/?hl=en";
-
-function InstagramSection() {
-  const { colors } = useTheme();
-
-  return (
-    <section className="mx-auto max-w-7xl px-4 py-12 min-[400px]:px-5 sm:px-8 sm:py-20">
-      <div className="grid gap-10 md:grid-cols-2 md:items-center lg:grid-cols-12 lg:gap-16">
-        <div className="lg:col-span-6">
-          <div className="relative pb-4">
-            <div
-              className="group relative aspect-[4/5] overflow-hidden border sm:aspect-[16/11]"
-              style={{
-                borderColor: colors.line,
-                backgroundColor: colors.panel,
-              }}
-            >
-              <Img
-                src="https://picsum.photos/seed/hustler-ig-feature/1100/800"
-                alt="Behind the scenes at TheHustlerMerchandise"
-                className="h-full w-full object-cover grayscale transition duration-500 group-hover:scale-105 group-hover:grayscale-0"
-              />
-
-              <div
-                className="absolute inset-0"
-                style={{
-                  backgroundImage: `linear-gradient(to top, ${hexToRgba(colors.bg, 0.6)}, transparent 55%)`,
-                }}
-              />
-            </div>
-
-            <div
-              className="absolute bottom-0 left-4 max-w-[calc(100%-2rem)] -rotate-2 border px-3 py-1.5 font-mono text-[9px] font-bold tracking-widest sm:left-6 sm:text-[10px]"
-              style={{
-                borderColor: "#131210",
-                backgroundColor: SIGNAL,
-                color: "#131210",
-              }}
-            >
-              ON THE FLOOR · @thehustler.merchandise
-            </div>
-          </div>
-        </div>
-
-        <div className="lg:col-span-6">
-          <span
-            className="font-mono text-[10px] tracking-[0.25em] sm:text-[11px]"
-            style={{ color: SIGNAL }}
-          >
-            Follow along
-          </span>
-
-          <h2
-            className="mt-3 font-display text-3xl uppercase leading-[0.95] tracking-tight min-[400px]:text-4xl sm:text-5xl"
-            style={{ color: colors.text }}
-          >
-            Behind the
-            <br />
-            stitching
-          </h2>
-
-          <p
-            className="mt-5 max-w-lg text-sm sm:text-base"
-            style={{ color: colors.textMuted }}
-          >
-            Print runs, packed orders, and the crew making it happen — we post the process, not
-            just the product. Follow along for early looks at new drops, restock alerts, and the
-            odd 6am studio photo.
-          </p>
-
-          <a
-            href={INSTAGRAM_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-8 inline-flex w-full items-center justify-center gap-2.5 px-7 py-3 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95 sm:w-auto"
-            style={{ backgroundColor: SIGNAL, color: "#131210" }}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#131210"
-              strokeWidth="2"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="5" />
-              <circle cx="12" cy="12" r="4" />
-              <circle cx="17.5" cy="6.5" r="1" fill="#131210" stroke="none" />
-            </svg>
-            Follow us on Instagram
-          </a>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* -------------------------------------------------------------------- */
-/*  FAQ section                                                         */
-/* -------------------------------------------------------------------- */
-
-function FAQItem({
-  q,
-  a,
-  open,
-  onToggle,
-}: {
-  q: string;
-  a: string;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const { colors } = useTheme();
-
-  return (
-    <div className="border-b" style={{ borderColor: colors.line }}>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-4 py-4 text-left sm:py-5"
-      >
-        <span
-          className="text-sm font-medium sm:text-base"
-          style={{ color: colors.text }}
-        >
-          {q}
-        </span>
-
-        <span
-          className="shrink-0 font-mono text-lg transition-transform"
-          style={{
-            color: SIGNAL,
-            transform: open ? "rotate(45deg)" : "rotate(0deg)",
-          }}
-        >
-          +
-        </span>
-      </button>
-
-      {open && (
-        <p
-          className="pb-5 text-sm leading-relaxed"
-          style={{ color: colors.textMuted }}
-        >
-          {a}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function FAQSection() {
-  const { colors } = useTheme();
-  const [openIndex, setOpenIndex] = useState<number | null>(0);
-
-  return (
-    <section
-      id="faqs"
-      className="mx-auto max-w-4xl scroll-mt-20 px-4 py-12 min-[400px]:px-5 sm:px-8 sm:py-20"
-    >
-      <SectionHeading eyebrow="Questions" title="Frequently asked" />
-
-      <div>
-        {FAQS.map((item, index) => (
-          <FAQItem
-            key={item.q}
-            q={item.q}
-            a={item.a}
-            open={openIndex === index}
-            onToggle={() =>
-              setOpenIndex((prev) => (prev === index ? null : index))
-            }
-          />
-        ))}
-      </div>
-
-      <p className="mt-8 text-sm" style={{ color: colors.textMuted }}>
-        Still have a question?{" "}
-        <a href="#contact" style={{ color: SIGNAL }} className="font-medium">
-          Get in touch
-        </a>
-        .
-      </p>
-    </section>
-  );
-}
-
-/* -------------------------------------------------------------------- */
-/*  Contact section                                                     */
-/*  TOAST: success toast on send, error toast if the request fails.     */
-/*  RESPONSIVE: inputs are 16px on mobile (stops iOS zoom-on-focus),    */
-/*  contact details wrap, button is full width on phones.               */
-/* -------------------------------------------------------------------- */
-
-function ContactSection() {
-  const { colors } = useTheme();
-  const { toast } = useToast();
-
-  const [submitted, setSubmitted] = useState(false);
-  const [sending, setSending] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (sending) return;
-
-    setSending(true);
-
-    try {
-      // TODO: wire this up to a real /api/contact route when one exists:
-      // const res = await fetch("/api/contact", {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget))),
-      // });
-      // if (!res.ok) throw new Error("Request failed");
-
-      setSubmitted(true);
-      toast("Message sent. We'll reply within one business day.", "success");
-    } catch {
-      toast(
-        "Couldn't send your message. Please try again in a moment.",
-        "error"
-      );
-    } finally {
-      setSending(false);
-    }
-  }
-
-  const fieldClass =
-    "w-full border px-3 py-3 text-base outline-none focus:border-[var(--signal)] sm:text-sm";
-  const fieldStyle = {
-    borderColor: colors.lineStrong,
-    backgroundColor: colors.bg,
-    color: colors.text,
-    "--signal": SIGNAL,
-  } as React.CSSProperties;
-
-  return (
-    <section
-      id="contact"
-      className="scroll-mt-20 py-12 sm:py-20"
-      style={{ backgroundColor: colors.panel }}
-    >
-      <div className="mx-auto grid max-w-7xl gap-8 px-4 min-[400px]:px-5 sm:px-8 lg:grid-cols-12 lg:gap-16">
-        <div className="lg:col-span-5">
-          <span
-            className="font-mono text-[10px] tracking-[0.25em] sm:text-[11px]"
-            style={{ color: SIGNAL }}
-          >
-            Get in touch
-          </span>
-
-          <h2
-            className="mt-3 font-display text-3xl uppercase leading-[0.95] tracking-tight min-[400px]:text-4xl sm:text-5xl"
-            style={{ color: colors.text }}
-          >
-            Contact us
-          </h2>
-
-          <p
-            className="mt-5 max-w-md text-sm"
-            style={{ color: colors.textMuted }}
-          >
-            Questions about an order, a custom print, or a bulk request — reach out and we'll
-            get back to you within one business day.
-          </p>
-
-          <div className="mt-8 space-y-3 font-mono text-xs sm:text-sm">
-            <p className="break-all" style={{ color: colors.text }}>
-              <a href="mailto:support@thehustlermerchandise.com">
-                support@thehustlermerchandise.com
-              </a>
-            </p>
-            <p style={{ color: colors.text }}>
-              <a href="tel:+919876543210">+91 98765 43210</a>
-            </p>
-            <p style={{ color: colors.textMuted }}>Mon–Sat, 10am–6pm IST</p>
-          </div>
-        </div>
-
-        <div className="lg:col-span-7">
-          {submitted ? (
-            <div
-              className="border p-5 font-mono text-sm sm:p-6"
-              style={{
-                borderColor: SIGNAL,
-                color: SIGNAL,
-                backgroundColor: colors.bg,
-              }}
-            >
-              <p>Thanks — your message has been noted. We'll get back to you soon.</p>
-
-              <button
-                type="button"
-                onClick={() => setSubmitted(false)}
-                className="mt-4 text-xs uppercase tracking-widest underline underline-offset-4"
-              >
-                Send another message
-              </button>
-            </div>
-          ) : (
-            <form
-              onSubmit={handleSubmit}
-              className="grid gap-3 sm:grid-cols-2 sm:gap-4"
-            >
-              <input
-                required
-                name="name"
-                autoComplete="name"
-                placeholder="Your name"
-                className={`${fieldClass} sm:col-span-1`}
-                style={fieldStyle}
-              />
-
-              <input
-                required
-                name="email"
-                type="email"
-                autoComplete="email"
-                placeholder="Your email"
-                className={`${fieldClass} sm:col-span-1`}
-                style={fieldStyle}
-              />
-
-              <input
-                name="orderId"
-                placeholder="Order ID (optional)"
-                className={`${fieldClass} sm:col-span-2`}
-                style={fieldStyle}
-              />
-
-              <textarea
-                required
-                name="message"
-                rows={5}
-                placeholder="How can we help?"
-                className={`${fieldClass} sm:col-span-2`}
-                style={fieldStyle}
-              />
-
-              <button
-                type="submit"
-                disabled={sending}
-                className="w-full px-7 py-3 font-mono text-xs font-bold uppercase tracking-widest transition hover:brightness-95 disabled:opacity-60 sm:col-span-2 sm:w-fit"
-                style={{
-                  backgroundColor: SIGNAL,
-                  color: "#131210",
-                }}
-              >
-                {sending ? "Sending…" : "Send message"}
-              </button>
-            </form>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* -------------------------------------------------------------------- */
-/*  Footer                                                              */
-/*  TOAST:                                                              */
-/*   - Newsletter: invalid-email error toast, success toast before      */
-/*     redirecting to /signup                                           */
-/*   - Track Order: when logged out, an info toast explains the login   */
-/*     redirect instead of silently bouncing the user                   */
-/*  RESPONSIVE: newsletter full width on phones, brand column spans     */
-/*  the full row until lg, larger tap targets on links.                 */
-/* -------------------------------------------------------------------- */
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function Footer() {
-  const { colors } = useTheme();
-  const { status } = useSession();
-  const { toast } = useToast();
-  const router = useRouter();
-
-  const isAuthenticated = status === "authenticated";
-
-  const [newsletterEmail, setNewsletterEmail] = useState("");
-
-  function handleTrackOrder(e: React.MouseEvent<HTMLAnchorElement>) {
-    e.preventDefault();
-
-    if (status === "loading") {
-      toast("Checking your session — try again in a moment.", "info");
-      return;
-    }
-
-    if (isAuthenticated) {
-      router.push("/orders");
-      return;
-    }
-
-    toast("Please log in to track your order.", "info");
-    setTimeout(() => {
-      router.push(`/login?redirect=${encodeURIComponent("/orders")}`);
-    }, 900);
-  }
-
-  function handleNewsletterSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-
-    const email = newsletterEmail.trim();
-
-    if (!email) {
-      toast("Enter your email to join.", "error");
-      return;
-    }
-
-    if (!EMAIL_RE.test(email)) {
-      toast("That email doesn't look right. Check it and try again.", "error");
-      return;
-    }
-
-    toast("You're in. Taking you to sign up…", "success");
-    setTimeout(() => {
-      router.push(`/signup?email=${encodeURIComponent(email)}`);
-    }, 800);
-  }
-
-  const linkClass = "inline-block py-0.5 transition hover:opacity-80";
-
-  return (
-    <footer className="border-t" style={{ borderColor: colors.line }}>
-      <div className="mx-auto max-w-7xl px-4 py-12 min-[400px]:px-5 sm:px-8 sm:py-14">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-3 lg:grid-cols-5">
-          <div className="col-span-2 md:col-span-3 lg:col-span-2">
-            <p
-              className="font-display text-2xl uppercase tracking-tight"
-              style={{ color: colors.text }}
-            >
-              The Hustler
-              <span style={{ color: SIGNAL }}>.</span>
-            </p>
-
-            <p
-              className="mt-3 max-w-xs text-sm"
-              style={{ color: colors.textMuted }}
-            >
-              Streetwear for the self-made. Designed and printed in-house, shipped across India.
-            </p>
-
-            <form
-              noValidate
-              className="mt-6 flex w-full max-w-sm border"
-              style={{
-                borderColor: colors.lineStrong,
-              }}
-              onSubmit={handleNewsletterSubmit}
-            >
-              <input
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                aria-label="Email address"
-                value={newsletterEmail}
-                onChange={(e) => setNewsletterEmail(e.target.value)}
-                placeholder="you@email.com"
-                className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-base focus:outline-none sm:text-sm"
-                style={{ color: colors.text }}
-              />
-
-              <button
-                type="submit"
-                className="shrink-0 whitespace-nowrap px-4 py-2.5 font-mono text-[10px] font-bold uppercase tracking-widest"
-                style={{
-                  backgroundColor: SIGNAL,
-                  color: "#131210",
-                }}
-              >
-                Join
-              </button>
-            </form>
-
-            <div
-              className="mt-6 flex gap-4"
-              style={{ color: colors.textMuted }}
-            >
-              <a
-                href={INSTAGRAM_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-[11px] tracking-widest transition hover:opacity-80"
-              >
-                Instagram
-              </a>
-            </div>
-          </div>
-
-          <div>
-            <p
-              className="font-mono text-[11px] tracking-widest"
-              style={{ color: colors.textMuted }}
-            >
-              Shop
-            </p>
-
-            <ul className="mt-4 space-y-1.5 text-sm">
-              <li>
-                <a href="#products" className={linkClass} style={{ color: colors.text }}>
-                  Featured Products
-                </a>
-              </li>
-
-              <li>
-                <a href="/categories" className={linkClass} style={{ color: colors.text }}>
-                  Collections
-                </a>
-              </li>
-
-              <li>
-                <a href="#custom" className={linkClass} style={{ color: colors.text }}>
-                  Custom Merch
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <p
-              className="font-mono text-[11px] tracking-widest"
-              style={{ color: colors.textMuted }}
-            >
-              Support
-            </p>
-
-            <ul className="mt-4 space-y-1.5 text-sm">
-              <li>
-                <a
-                  href={
-                    isAuthenticated
-                      ? "/orders"
-                      : `/login?redirect=${encodeURIComponent("/orders")}`
-                  }
-                  onClick={handleTrackOrder}
-                  className={linkClass}
-                  style={{ color: colors.text }}
-                >
-                  Track Order
-                </a>
-              </li>
-
-              <li>
-                <a href="/size-guide" className={linkClass} style={{ color: colors.text }}>
-                  Size Guide
-                </a>
-              </li>
-
-              <li>
-                <a href="/#faqs" className={linkClass} style={{ color: colors.text }}>
-                  FAQs
-                </a>
-              </li>
-
-              <li>
-                <a href="/#contact" className={linkClass} style={{ color: colors.text }}>
-                  Contact Us
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <p
-              className="font-mono text-[11px] tracking-widest"
-              style={{ color: colors.textMuted }}
-            >
-              Policies
-            </p>
-
-            <ul className="mt-4 space-y-1.5 text-sm">
-              <li>
-                <a href="/shipping-policy" className={linkClass} style={{ color: colors.text }}>
-                  Shipping Policy
-                </a>
-              </li>
-
-              <li>
-                <a href="/returns-exchanges" className={linkClass} style={{ color: colors.text }}>
-                  Returns & Exchanges
-                </a>
-              </li>
-
-              <li>
-                <a href="/privacy-policy" className={linkClass} style={{ color: colors.text }}>
-                  Privacy Policy
-                </a>
-              </li>
-
-              <li>
-                <a href="/terms-of-service" className={linkClass} style={{ color: colors.text }}>
-                  Terms of Service
-                </a>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div
-          className="mt-10 flex flex-col items-center justify-between gap-3 border-t pt-6 text-center text-xs sm:mt-12 sm:flex-row sm:text-left"
-          style={{
-            borderColor: colors.line,
-            color: colors.textMuted,
-          }}
-        >
-          <p>
-            © {new Date().getFullYear()} TheHustlerMerchandise. All rights reserved.
-          </p>
-
-          <p className="font-mono text-[10px] tracking-widest">Made in India</p>
+        <div className="mt-12 flex flex-col gap-2 border-t border-white/15 pt-6 text-xs text-[#9a9a9a] sm:flex-row sm:items-center sm:justify-between">
+          <p>© {new Date().getFullYear()} The Hustler Merchandise. All rights reserved.</p>
+          <p>Made in India</p>
         </div>
       </div>
     </footer>
   );
 }
 
-/* -------------------------------------------------------------------- */
-/*  Page                                                                */
-/*  TOAST: Home is now a thin wrapper that mounts <ToastProvider>; the  */
-/*  real page lives in HomeContent so it can call useToast().           */
-/*  Product-load failure now raises an error toast.                     */
-/*  RESPONSIVE: root has overflow-x-hidden so rotated stickers can't    */
-/*  create horizontal scroll; marquee respects prefers-reduced-motion.  */
-/* -------------------------------------------------------------------- */
+/* -------------------------------- Page ------------------------------ */
 
 function HomeContent() {
   const { toast } = useToast();
-
+  const colors = usePalette();
   const [products, setProducts] = useState<Product[]>([]);
-  const [productsLoading, setProductsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-
-    async function loadProducts() {
+    (async () => {
       try {
-        setProductsLoading(true);
-
-        const res = await fetch("/api/products", {
-          cache: "no-store",
-        });
-
-        if (!res.ok) {
-          throw new Error(`Request failed with ${res.status}`);
-        }
-
+        setLoading(true);
+        const res = await fetch("/api/products", { cache: "no-store" });
+        if (!res.ok) throw new Error(String(res.status));
         const raw = await res.json();
         const data: Product[] = Array.isArray(raw) ? raw : raw.data ?? [];
-
-        if (!cancelled) {
-          setProducts(data);
-        }
+        if (!cancelled) setProducts(data);
       } catch (error) {
         console.error("Failed to load products:", error);
-
         if (!cancelled) {
           setProducts([]);
           toast("Couldn't load products. Please refresh the page.", "error");
         }
       } finally {
-        if (!cancelled) {
-          setProductsLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
-    }
-
-    loadProducts();
-
+    })();
     return () => {
       cancelled = true;
     };
   }, [toast]);
 
+  const best = [...products].sort(
+    (a, b) => (b.rating ?? 0) * (b.reviewCount ?? 0) - (a.rating ?? 0) * (a.reviewCount ?? 0)
+  );
+
   return (
-    <div className="overflow-x-hidden">
+    <div
+      className="overflow-x-hidden"
+      style={{ backgroundColor: colors.bg, color: colors.text }}
+    >
       <Hero />
-
-      <Ticker />
-
       <FeaturedCategories />
-
-      <FeaturedProducts products={products} loading={productsLoading} />
-
-      <CustomMerch />
-
-      <BestProducts products={products} loading={productsLoading} />
-
-      <BrandStory />
-
-      <Reviews />
-
+      <ProductGrid
+        id="products"
+        eyebrow="Just dropped"
+        title="New arrivals"
+        action={{ label: "View all", href: "/products" }}
+        products={products}
+        loading={loading}
+        count={8}
+        isNew
+      />
+      <ProductGrid
+        eyebrow="Most loved"
+        title="Bestsellers"
+        action={{ label: "View all", href: "/products" }}
+        products={best}
+        loading={loading}
+        count={4}
+      />
       <InstagramSection />
-
-      <FAQSection />
-
-      <ContactSection />
-
+      <Testimonials />
+      <Newsletter />
       <Footer />
 
       <style>{`
-        @keyframes marquee {
-          from { transform: translateX(0); }
-          to   { transform: translateX(-50%); }
-        }
-
-        @keyframes fade-up {
-          from { opacity: 0; transform: translateY(16px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes toast-in {
-          from { opacity: 0; transform: translateY(12px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-
         @media (prefers-reduced-motion: reduce) {
-          * {
-            animation-duration: 0.01ms !important;
-            animation-iteration-count: 1 !important;
-            transition-duration: 0.01ms !important;
-          }
+          * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
         }
       `}</style>
     </div>
