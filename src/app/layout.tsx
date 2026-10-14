@@ -6,7 +6,7 @@ import { CartProvider } from "@/src/context/CartContext";
 import { AuthProvider } from "@/src/context/AuthContext";
 import { ToastProvider } from "@/src/context/ToastContext";
 
-import SessionProviderWrapper from "@/src/components/sessionProviderWrapper";
+import SessionProviderWrapper from "@/src/components/SessionProviderWrapper";
 import Header from "@/src/components/Header";
 // import AnnouncementBar from "@/src/components/AnnouncementBar";
 
