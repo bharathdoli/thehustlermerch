@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useToast } from "@/src/context/ToastContext";
 import {
   ORANGE,
@@ -29,6 +29,101 @@ type Variant = {
   price: string;
   stockQuantity: number;
 };
+
+/**
+ * Custom dropdown used instead of a native <select>.
+ * The native popup is drawn by the browser/OS and renders oversized on
+ * mobile (wider than the control, huge text). This one stays the same
+ * width and font size as the field.
+ */
+function ProductSelect({
+  products,
+  value,
+  onChange,
+  loading,
+}: {
+  products: Product[];
+  value: string;
+  onChange: (id: string) => void;
+  loading: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const selected = products.find((p) => p.productId === value);
+
+  function pick(id: string) {
+    onChange(id);
+    setOpen(false);
+  }
+
+  const itemClass = "cursor-pointer px-3 py-2 text-sm";
+
+  return (
+    <div ref={ref} className="relative w-full">
+      <button
+        type="button"
+        disabled={loading}
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`${adminInputClass} flex items-center justify-between gap-2 text-left`}
+        style={adminInputStyle}
+      >
+        <span className="truncate">
+          {loading ? "Loading..." : selected?.productName ?? "Choose a product..."}
+        </span>
+        <span aria-hidden className="text-[10px]">▾</span>
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          className="absolute left-0 right-0 z-20 mt-1 max-h-60 overflow-y-auto border shadow-md"
+          style={{ background: "#fff", borderColor: "rgba(0,0,0,0.2)" }}
+        >
+          <li
+            role="option"
+            aria-selected={!value}
+            onClick={() => pick("")}
+            className={itemClass}
+            style={{ color: colors.textMuted }}
+          >
+            Choose a product...
+          </li>
+          {products.map((p) => (
+            <li
+              key={p.productId}
+              role="option"
+              aria-selected={p.productId === value}
+              onClick={() => pick(p.productId)}
+              className={`${itemClass} hover:bg-black/5`}
+              style={p.productId === value ? { background: "rgba(0,0,0,0.08)", fontWeight: 600 } : undefined}
+            >
+              {p.productName}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export default function VariantsPanel() {
   const toast = useToast();
@@ -185,20 +280,12 @@ export default function VariantsPanel() {
   return (
     <div className="w-full min-w-0">
       <Field label="Select product" className="w-full max-w-xs">
-        <select
+        <ProductSelect
+          products={products}
           value={selectedProductId}
-          onChange={(e) => handleProductChange(e.target.value)}
-          disabled={loadingProducts}
-          className={adminInputClass}
-          style={adminInputStyle}
-        >
-          <option value="">{loadingProducts ? "Loading..." : "Choose a product..."}</option>
-          {products.map((p) => (
-            <option key={p.productId} value={p.productId}>
-              {p.productName}
-            </option>
-          ))}
-        </select>
+          onChange={handleProductChange}
+          loading={loadingProducts}
+        />
       </Field>
 
       {selectedProductId && (

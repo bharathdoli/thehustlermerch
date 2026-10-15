@@ -1,79 +1,86 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { ORANGE, usePalette } from "@/src/lib/palette";
 import CategoriesPanel from "@/src/components/CategoriesPanel";
 import ProductsPanel from "@/src/components/ProductsPanel";
 import VariantsPanel from "@/src/components/VariantsPanel";
 import CouponsPanel from "@/src/components/CouponsPanel";
 
-const TABS = ["Categories", "Products", "Variants", "Coupons"] as const;
-type Tab = (typeof TABS)[number];
+const TABS = [
+  { id: "Categories", hint: "Groups in the shop" },
+  { id: "Products", hint: "Items you sell" },
+  { id: "Variants", hint: "Sizes, colours, prices" },
+  { id: "Coupons", hint: "Discount codes" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
 
 export default function AdminPage() {
   const colors = usePalette();
   const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState<Tab>("Categories");
 
+  // Shared theme variables read by every component in AdminUi
+  const theme = {
+    "--a-bg": colors.bg,
+    "--a-text": colors.text,
+    "--a-muted": colors.textMuted,
+    "--a-line": colors.line,
+    backgroundColor: colors.bg,
+    color: colors.text,
+  } as CSSProperties;
+
   return (
-    <div style={{ backgroundColor: colors.bg, color: colors.text }} className="min-h-[70vh]">
-      <div className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-8 sm:py-16">
-        <div>
-          <span
-            className="text-[11px] font-medium uppercase tracking-[0.25em]"
-            style={{ color: ORANGE }}
-          >
-            Admin
-          </span>
-          <h1
-            className="mt-1.5 font-display text-4xl font-black uppercase leading-[0.95] tracking-[-0.03em] sm:text-6xl"
-            style={{ color: colors.text }}
-          >
+    <div style={theme} className="min-h-[70vh]">
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-8 sm:py-10">
+        <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+          <h1 className="font-display text-3xl font-black uppercase leading-none tracking-[-0.03em] sm:text-4xl">
             Dashboard
           </h1>
-          <p
-            className="mt-3 break-all text-sm sm:break-normal"
-            style={{ color: colors.textMuted }}
-          >
-            {session?.user?.name} · {session?.user?.email}
+          <p className="break-all text-sm sm:break-normal" style={{ color: colors.textMuted }}>
+            Signed in as {session?.user?.email ?? session?.user?.name}
           </p>
-        </div>
+        </header>
 
-        {/* Tabs scroll sideways on narrow screens instead of wrapping or overflowing */}
-        <div
-          role="tablist"
-          className="-mx-4 mt-8 flex gap-1 overflow-x-auto border-b px-4 sm:mx-0 sm:mt-10 sm:gap-2 sm:px-0"
-          style={{ borderColor: colors.line }}
-        >
-          {TABS.map((tab) => {
-            const active = activeTab === tab;
+        <div className="mt-6 grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-10">
+          {/* Sidebar on desktop, scrollable strip on mobile */}
+          <nav
+            role="tablist"
+            aria-label="Admin sections"
+            className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 lg:mx-0 lg:flex-col lg:gap-1 lg:overflow-visible lg:px-0 lg:pb-0"
+          >
+            {TABS.map((tab) => {
+              const active = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setActiveTab(tab.id)}
+                  className="shrink-0 whitespace-nowrap border-l-0 px-4 py-2.5 text-left transition hover:opacity-100 lg:border-l-[3px]"
+                  style={{
+                    backgroundColor: active ? `color-mix(in srgb, ${colors.text} 6%, ${colors.bg})` : "transparent",
+                    borderColor: active ? ORANGE : "transparent",
+                    opacity: active ? 1 : 0.7,
+                  }}
+                >
+                  <span className="block text-sm font-semibold">{tab.id}</span>
+                  <span className="hidden text-xs lg:block" style={{ color: colors.textMuted }}>
+                    {tab.hint}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
 
-            return (
-              <button
-                key={tab}
-                role="tab"
-                aria-selected={active}
-                onClick={() => setActiveTab(tab)}
-                className="shrink-0 whitespace-nowrap border-b-2 px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] transition hover:opacity-100 sm:px-4"
-                style={{
-                  borderColor: active ? colors.text : "transparent",
-                  color: active ? colors.text : colors.textMuted,
-                  marginBottom: "-1px",
-                }}
-              >
-                {tab}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* min-w-0 lets wide tables inside panels scroll rather than stretch the page */}
-        <div className="mt-6 min-w-0 sm:mt-8">
-          {activeTab === "Categories" && <CategoriesPanel />}
-          {activeTab === "Products" && <ProductsPanel />}
-          {activeTab === "Variants" && <VariantsPanel />}
-          {activeTab === "Coupons" && <CouponsPanel />}
+          {/* min-w-0 lets wide tables scroll inside the panel instead of stretching the page */}
+          <main className="min-w-0" role="tabpanel">
+            {activeTab === "Categories" && <CategoriesPanel />}
+            {activeTab === "Products" && <ProductsPanel />}
+            {activeTab === "Variants" && <VariantsPanel />}
+            {activeTab === "Coupons" && <CouponsPanel />}
+          </main>
         </div>
       </div>
     </div>

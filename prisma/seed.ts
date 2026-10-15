@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import {
   UserRole,
   OrderStatus,
@@ -9,14 +10,19 @@ import { prisma } from "@/src/lib/db/prisma";
 async function main() {
   console.log("Seeding...");
 
+  // Hash once and reuse. Matches registerUser (bcrypt, 12 rounds).
+  const passwordHash = await bcrypt.hash("Password@123", 12);
+
   // ── 1. Users ─────────────────────────────────────────────────────
+  // `update` overwrites the password so rows that were previously seeded
+  // with a plaintext password get fixed on re-run.
   const admin = await prisma.user.upsert({
     where: { email: "admin@printingpress.com" },
-    update: {},
+    update: { password: passwordHash, role: UserRole.Admin },
     create: {
       uname: "Admin",
       email: "admin@printingpress.com",
-      password: "Password@123",
+      password: passwordHash,
       phoneNo: "9999999999",
       role: UserRole.Admin,
     },
@@ -24,11 +30,11 @@ async function main() {
 
   const customer = await prisma.user.upsert({
     where: { email: "customer@example.com" },
-    update: {},
+    update: { password: passwordHash },
     create: {
       uname: "Test Customer",
       email: "customer@example.com",
-      password: "Password@123",
+      password: passwordHash,
       phoneNo: "8888888888",
       role: UserRole.Customer,
     },
@@ -53,6 +59,9 @@ async function main() {
       },
     });
   }
+
+  // Non-null const so TypeScript keeps the type inside the transaction callback.
+  const shipTo = address;
 
   // ── 3. Categories -> Products -> Variants ──────────────────────────
   const catalog = [
@@ -219,81 +228,91 @@ async function main() {
     const shippingCost = 50;
     const totalAmount = subtotal - discountAmount + shippingCost; // 588.2
 
-    demoOrder = await prisma.$transaction(async (tx) => {
-      const order = await tx.order.create({
-        data: {
-          userId: customer.uid,
-          status: OrderStatus.delivered,
-          subtotal,
-          discountAmount,
-          shippingCost,
-          totalAmount,
-          couponId: coupon.couponId,
-          shippingName: address.recipientName,
-          shippingPhone: address.recipientPhone,
-          shippingAddressLine1: address.addressLine1,
-          shippingAddressLine2: address.addressLine2,
-          shippingCity: address.city,
-          shippingState: address.state,
-          shippingPincode: address.pincode,
-          shippingCountry: address.country,
-          trackingId: "TRK123456789",
-          courierName: "Delhivery",
-        },
-      });
-
-      await tx.item.create({
-        data: {
-          userId: customer.uid,
-          orderId: order.orderId,
-          variantId: capVariant.variantId,
-          quantity,
-          unitPrice: capVariant.price,
-        },
-      });
-
-      await tx.productVariant.update({
-        where: { variantId: capVariant.variantId },
-        data: { stockQuantity: { decrement: quantity } },
-      });
-
-      await tx.coupon.update({
-        where: { couponId: coupon.couponId },
-        data: { usageCount: { increment: 1 } },
-      });
-
-      await tx.payment.create({
-        data: {
-          orderId: order.orderId,
-          paymentMode: "UPI",
-          amount: totalAmount,
-          status: PaymentStatus.paid,
-        },
-      });
-
-      const stages: { status: OrderStatus; note: string }[] = [
-        { status: OrderStatus.pending, note: "Order placed" },
-        { status: OrderStatus.paymentConfirmed, note: "Payment recorded manually via UPI" },
-        { status: OrderStatus.processing, note: "Printing and packing" },
-        { status: OrderStatus.shipped, note: "Handed to courier" },
-        { status: OrderStatus.delivered, note: "Delivered to customer" },
-      ];
-
-      for (const stage of stages) {
-        await tx.orderStatusLog.create({
-          data: { orderId: order.orderId, status: stage.status, note: stage.note },
+    demoOrder = await prisma.$transaction(
+      async (tx) => {
+        const order = await tx.order.create({
+          data: {
+            userId: customer.uid,
+            status: OrderStatus.delivered,
+            subtotal,
+            discountAmount,
+            shippingCost,
+            totalAmount,
+            couponId: coupon.couponId,
+            shippingName: shipTo.recipientName,
+            shippingPhone: shipTo.recipientPhone,
+            shippingAddressLine1: shipTo.addressLine1,
+            shippingAddressLine2: shipTo.addressLine2,
+            shippingCity: shipTo.city,
+            shippingState: shipTo.state,
+            shippingPincode: shipTo.pincode,
+            shippingCountry: shipTo.country,
+            trackingId: "TRK123456789",
+            courierName: "Delhivery",
+          },
         });
-      }
 
-      return order;
-    });
+        await tx.item.create({
+          data: {
+            userId: customer.uid,
+            orderId: order.orderId,
+            variantId: capVariant.variantId,
+            quantity,
+            unitPrice: capVariant.price,
+          },
+        });
+
+        await tx.productVariant.update({
+          where: { variantId: capVariant.variantId },
+          data: { stockQuantity: { decrement: quantity } },
+        });
+
+        await tx.coupon.update({
+          where: { couponId: coupon.couponId },
+          data: { usageCount: { increment: 1 } },
+        });
+
+        await tx.payment.create({
+          data: {
+            orderId: order.orderId,
+            paymentMode: "UPI",
+            amount: totalAmount,
+            status: PaymentStatus.paid,
+          },
+        });
+
+        const stages: { status: OrderStatus; note: string }[] = [
+          { status: OrderStatus.pending, note: "Order placed" },
+          {
+            status: OrderStatus.paymentConfirmed,
+            note: "Payment recorded manually via UPI",
+          },
+          { status: OrderStatus.processing, note: "Printing and packing" },
+          { status: OrderStatus.shipped, note: "Handed to courier" },
+          { status: OrderStatus.delivered, note: "Delivered to customer" },
+        ];
+
+        for (const stage of stages) {
+          await tx.orderStatusLog.create({
+            data: {
+              orderId: order.orderId,
+              status: stage.status,
+              note: stage.note,
+            },
+          });
+        }
+
+        return order;
+      },
+      { timeout: 15000 }
+    );
   }
 
   console.log("Seed complete.\n");
   console.log("── Postman test data ─────────────────────────────");
   console.log("Admin login   :", admin.email, "/ Password@123");
   console.log("Customer login:", customer.email, "/ Password@123");
-  console.log("Address ID    :", address.addressId);
+  console.log("Address ID    :", shipTo.addressId);
   console.log("Cap variant   :", capVariant.variantId, `(₹${capVariant.price}, stock now check DB)`);
   console.log("Hoodie variant:", hoodieVariant.variantId, `(₹${hoodieVariant.price})`);
   console.log("Coupon code   : WELCOME10");
